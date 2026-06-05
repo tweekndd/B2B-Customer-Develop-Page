@@ -163,13 +163,34 @@ async def _fetch_via_serpapi(
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(SERPAPI_URL, params=params)
-            response.raise_for_status()
 
-            data = response.json()
+            # 先检查HTTP状态
+            if response.status_code != 200:
+                print(f"  SerpAPI HTTP {response.status_code}: {query[:40]}")
+                if response.status_code == 429:
+                    print("  SerpAPI 速率限制，等待5秒...")
+                    await asyncio.sleep(5)
+                return None
 
-            # 检查SerpAPI返回的错误
+            # 尝试解析JSON
+            try:
+                data = response.json()
+            except Exception:
+                # 返回的不是JSON，可能是余额不足或API Key无效的页面
+                text_preview = response.text[:300].replace("\n", " ")
+                print(f"  SerpAPI 返回非JSON响应(可能API Key无效或余额不足): {text_preview}")
+                return None
+
+            # 检查SerpAPI返回的业务错误
             if "error" in data:
                 print(f"  SerpAPI 返回错误: {data['error']}")
+                return None
+
+            # 检查搜索配额是否用尽
+            search_metadata = data.get("search_metadata", {})
+            if search_metadata.get("status") == "Error":
+                error_msg = data.get("error", "未知错误")
+                print(f"  SerpAPI 搜索失败: {error_msg}")
                 return None
 
             # 解析 organic_results
@@ -180,12 +201,9 @@ async def _fetch_via_serpapi(
         return None
     except httpx.HTTPStatusError as e:
         print(f"  SerpAPI HTTP错误 {e.response.status_code}: {query[:40]}")
-        if e.response.status_code == 429:
-            print("  SerpAPI 速率限制，等待5秒...")
-            await asyncio.sleep(5)
         return None
     except Exception as e:
-        print(f"  SerpAPI 异常: {str(e)[:150]}")
+        print(f"  SerpAPI 异常 [{type(e).__name__}]: {str(e)[:200]}")
         return None
 
 

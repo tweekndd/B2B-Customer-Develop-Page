@@ -61,10 +61,32 @@
             </div>
         </div>
 
-        <!-- 搜索状态提示 -->
-        <div id="searchRunningBar" class="d-none alert alert-warning d-flex justify-content-between align-items-center py-2 mb-3">
-            <span><i class="bi bi-hourglass-split"></i> <span id="searchStatusText">搜索任务进行中...</span></span>
-            <button class="btn btn-sm btn-outline-danger" onclick="stopSearchTask()"><i class="bi bi-stop-circle"></i> 停止任务</button>
+        <!-- 搜索状态提示（实时进度） -->
+        <div id="searchRunningBar" class="d-none alert alert-warning mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-hourglass-split me-2"></i>
+                    <div>
+                        <strong id="searchStatusText">搜索任务进行中...</strong>
+                        <br>
+                        <small class="text-muted" id="searchProgressDetail">等待中...</small>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="stopSearchTask()"><i class="bi bi-stop-circle"></i> 停止任务</button>
+            </div>
+            <!-- 进度条 -->
+            <div class="progress mt-2" style="height: 8px;">
+                <div id="searchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width: 0%"></div>
+            </div>
+            <!-- 扩展关键词列表（折叠） -->
+            <div class="mt-2">
+                <button class="btn btn-sm btn-link p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#keywordListCollapse" aria-expanded="false">
+                    <i class="bi bi-list-ul"></i> 查看扩展关键词列表 <i class="bi bi-chevron-down small"></i>
+                </button>
+                <div class="collapse mt-1" id="keywordListCollapse">
+                    <div id="keywordListContainer" class="d-flex flex-wrap gap-1"></div>
+                </div>
+            </div>
         </div>
 
         <!-- 搜索任务列表 -->
@@ -187,7 +209,7 @@
                 const resp = await fetch(`/api/discovery/search-task?country=${encodeURIComponent(country)}&keyword=${encodeURIComponent(keyword)}&depth=${depth}`, { method: 'POST' });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.detail || '创建任务失败');
-                showSearchStatus('搜索任务已启动');
+                updateSearchStatus('搜索任务已启动', '正在扩展关键词...', 0, [], 0);
                 loadTasks();
                 // 开始轮询
                 if (!taskPollTimer) {
@@ -201,19 +223,45 @@
         async function stopSearchTask() {
             try {
                 await fetch('/api/stop-analysis', { method: 'POST' });
-                document.getElementById('searchStatusText').textContent = '正在停止...';
-                setTimeout(() => { hideSearchStatus(); loadTasks(); }, 2000);
+                updateSearchStatus('正在停止...', '等待当前步骤完成后停止', 0, [], 0);
             } catch (err) { console.error('停止失败:', err); }
         }
 
-        function showSearchStatus(text) {
-            document.getElementById('searchStatusText').textContent = text;
+        function updateSearchStatus(title, detail, progress, keywords, currentIdx) {
+            document.getElementById('searchStatusText').textContent = title;
+            document.getElementById('searchProgressDetail').textContent = detail;
+            document.getElementById('searchProgressBar').style.width = Math.min(progress, 100) + '%';
+            document.getElementById('searchProgressBar').textContent = progress + '%';
             document.getElementById('searchRunningBar').classList.remove('d-none');
+
+            // 更新关键词列表
+            const kwContainer = document.getElementById('keywordListContainer');
+            if (keywords && keywords.length > 0) {
+                let kwHtml = '';
+                keywords.forEach((kw, i) => {
+                    const isDone = i < currentIdx;
+                    const isCurrent = i === currentIdx;
+                    const isPending = i > currentIdx;
+                    let cls = 'bg-light text-muted border';
+                    let icon = '';
+                    if (isDone) { cls = 'bg-success'; icon = '✅ '; }
+                    else if (isCurrent) { cls = 'bg-warning text-dark'; icon = '⏳ '; }
+                    else { icon = '⏸️ '; }
+                    kwHtml += `<span class="badge ${cls}" style="font-weight:400">${icon}${kw}</span>`;
+                });
+                kwContainer.innerHTML = kwHtml;
+            } else {
+                kwContainer.innerHTML = '<span class="text-muted small">暂无关键词</span>';
+            }
         }
 
         function hideSearchStatus() {
             document.getElementById('searchRunningBar').classList.add('d-none');
-            if (taskPollTimer) { clearInterval(taskPollTimer); taskPollTimer = null; }
+        }
+
+        function startPolling() {
+            if (taskPollTimer) clearInterval(taskPollTimer);
+            taskPollTimer = setInterval(() => { loadTasks(); loadDiscovered(); }, 3000);
         }
 
         // ──── 加载任务列表 ────
@@ -225,6 +273,7 @@
 
                 if (!data.tasks || data.tasks.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">暂无搜索任务</td></tr>';
+                    hideSearchStatus();
                     return;
                 }
 
@@ -233,20 +282,50 @@
                     'Completed': 'bg-success', 'Failed': 'bg-danger', 'Paused': 'bg-info text-dark'
                 };
 
+                // 找到当前活跃的任务（优先 Running，其次 Pending）
+                const activeTask = data.tasks.find(t => t.status === 'Running') ||
+                                   data.tasks.find(t => t.status === 'Pending');
+
+                // 更新状态栏
+                if (activeTask) {
+                    const totalKw = activeTask.expanded_keywords?.length || 1;
+                    const currentIdx = activeTask.current_keyword_index || 0;
+                    const progress = activeTask.status === 'Pending' ? 0 :
+                        Math.round((currentIdx / totalKw) * 100);
+
+                    const currentKeyword = activeTask.expanded_keywords?.[currentIdx] || activeTask.keyword;
+
+                    updateSearchStatus(
+                        `任务 #${activeTask.id}: ${activeTask.country} / ${activeTask.keyword}`,
+                        `正在处理第 ${currentIdx + 1}/${totalKw} 个关键词: 「${currentKeyword}」 | 发现 ${activeTask.found_websites || 0} 个网站, 新增 ${activeTask.new_companies || 0} 个公司`,
+                        progress,
+                        activeTask.expanded_keywords || [],
+                        currentIdx
+                    );
+                } else {
+                    hideSearchStatus();
+                }
+
                 let html = '';
                 data.tasks.forEach(t => {
-                    const isActive = t.status === 'Running' || t.status === 'Pending';
-                    if (isActive) showSearchStatus(`正在处理 ${t.country}/${t.keyword}...`);
-
                     const totalKw = t.expanded_keywords?.length || 1;
                     const progress = t.status === 'Completed' ? 100 :
                         t.status === 'Pending' ? 0 :
                         Math.round(((t.current_keyword_index || 0) / totalKw) * 100);
 
+                    // 显示当前处理的关键词名称
+                    let keywordLabel = t.keyword;
+                    if (t.status === 'Running' && t.expanded_keywords?.length > 0) {
+                        const idx = t.current_keyword_index || 0;
+                        if (idx < t.expanded_keywords.length) {
+                            keywordLabel += ` → ${t.expanded_keywords[idx]}`;
+                        }
+                    }
+
                     html += `<tr>
                         <td>#${t.id}</td>
                         <td>${t.country}</td>
-                        <td class="small">${t.keyword}</td>
+                        <td class="small">${keywordLabel}</td>
                         <td>${t.expanded_keywords?.length || '-'}</td>
                         <td><span class="badge ${statusBadge[t.status] || 'bg-secondary'}">${t.status}</span></td>
                         <td>${t.found_websites}</td>
@@ -261,14 +340,11 @@
                         <td>
                             ${t.status === 'Paused' ? `<button class="btn btn-sm btn-outline-success" onclick="resumeTask(${t.id})"><i class="bi bi-play-fill"></i> 恢复</button>` : ''}
                             ${t.status === 'Completed' ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteTask(${t.id})"><i class="bi bi-trash"></i></button>` : ''}
+                            ${t.status === 'Failed' ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteTask(${t.id})"><i class="bi bi-trash"></i></button>` : ''}
                         </td>
                     </tr>`;
                 });
                 tbody.innerHTML = html;
-
-                // 检查是否有运行中的任务
-                const hasRunning = data.tasks.some(t => t.status === 'Running' || t.status === 'Pending');
-                if (!hasRunning) hideSearchStatus();
 
             } catch (err) { console.error('加载任务失败:', err); }
         }
@@ -278,7 +354,7 @@
                 const resp = await fetch(`/api/discovery/tasks/${id}/resume`, { method: 'POST' });
                 const data = await resp.json();
                 loadTasks();
-                if (!taskPollTimer) taskPollTimer = setInterval(() => { loadTasks(); loadDiscovered(); }, 3000);
+                startPolling();
             } catch (err) { alert('恢复失败: ' + err.message); }
         }
 
@@ -349,8 +425,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadTasks();
             loadDiscovered();
-            // 自动轮询
-            taskPollTimer = setInterval(() => { loadTasks(); loadDiscovered(); }, 5000);
+            // 自动轮询（3秒间隔检测任务状态）
+            startPolling();
         });
     </script>
 
