@@ -14,6 +14,7 @@ build/
 # 项目临时文件
 app/uploads/*
 !app/uploads/.gitkeep
+*.db
 
 # IDE
 .idea/
@@ -23,3 +24,6 @@ app/uploads/*
 # 环境变量
 .env
 *.local
+
+# 旧嵌套目录（已迁移到根目录）
+外贸开发系统/

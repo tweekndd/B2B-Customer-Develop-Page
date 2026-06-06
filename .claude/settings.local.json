@@ -8,7 +8,11 @@
       "Read(//Users/khalillabamba/**)",
       "Bash(git init *)",
       "Bash(git remote *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m 'v2.0.1: 修复停止任务按钮无响应问题 *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git rm *)"
     ]
   }
 }
