@@ -309,12 +309,24 @@
         // 停止搜索任务
         // ═══════════════════════════════════════════
         async function stopSearchTask() {
+            const btn = document.querySelector('#searchRunningBar .btn-outline-danger');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 停止中...'; }
             try {
-                await _fetchWithTimeout('/api/stop-analysis', { method: 'POST' });
-                // 停止后立即刷新任务状态，不用等待轮询
-                await _refreshAll();
+                const resp = await _fetchWithTimeout('/api/stop-analysis', { method: 'POST' });
+                const data = await resp.json();
+                // 显示停止信号已发送的提示
+                document.getElementById('searchStatusText').textContent = '⏳ 正在停止...';
+                document.getElementById('searchProgressDetail').textContent = data.message || '正在等待当前任务完成';
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止中...'; }
+                // 3秒后自动刷新状态
+                setTimeout(async () => {
+                    await _refreshAll();
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止任务'; }
+                }, 3000);
             } catch (err) {
                 console.error('停止失败:', err);
+                alert('发送停止信号失败: ' + err.message);
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止任务'; }
             }
         }
 

@@ -113,11 +113,17 @@ async def run_search_task(task_id: int):
                 db.commit()
                 return
 
+            # 每次处理新关键词前重置状态（如果之前被暂停过）
+            if task.status != "Running":
+                task.status = "Running"
+                db.commit()
+
             keyword = expanded_keywords[idx]
             logger.info(f"[{idx+1}/{len(expanded_keywords)}] 搜索关键词: {keyword}")
 
             # 更新当前进度
             task.current_keyword_index = idx
+            task.status = "Running"
             db.commit()
 
             # 步骤3：检查搜索缓存
@@ -256,6 +262,13 @@ async def _auto_analyze_and_save(
     if website_text:
         customer.website_text = website_text
 
+        # 检查停止标记 — 爬取完成后，AI分析前
+        if _global_stop_flag:
+            logger.info(f"停止信号已触发，跳过 {domain} 的AI分析")
+            customer.analyzed_at = datetime.datetime.utcnow()
+            db.commit()
+            return
+
         # 步骤2：邮箱提取
         emails = extract_emails_from_text(website_text)
         email_list = list(set(emails))
@@ -272,6 +285,13 @@ async def _auto_analyze_and_save(
             ai_result = cached_analysis
             logger.info(f"使用AI分析缓存: {domain}")
         else:
+            # 检查停止标记 — AI分析前（AI分析是最耗时步骤）
+            if _global_stop_flag:
+                logger.info(f"停止信号已触发，跳过 {domain} 的AI分析")
+                customer.analyzed_at = datetime.datetime.utcnow()
+                db.commit()
+                return
+
             ai_result = await retry_async(
                 analyze_company,
                 website_text,
