@@ -1,0 +1,83 @@
+请优化以下前端页面（客户发现系统 HTML + JS），重点提升稳定性、性能、数据一致性与交互可靠性，不改变现有功能结构。
+
+一、轮询机制优化（重要）
+
+保证 taskPollTimer 为单例
+startPolling / startSearch 不得重复创建 setInterval
+必须在以下情况清理轮询：
+页面刷新或关闭（beforeunload）
+无 Running / Pending 任务时
+stopSearchTask 执行后
+防止多个轮询同时运行导致 API 压力倍增
+轮询逻辑需可控
+避免多个 setInterval 并存
+必须提供 clearPolling() 方法统一管理
+
+二、任务状态逻辑修复
+
+activeTask 选择逻辑优化
+当前 find(Running) || find(Pending) 不可靠
+改为后端提供 current_task_id 或明确 active_task
+前端只跟踪单一任务状态
+progress 计算必须防御异常
+expanded_keywords 可能为空或非数组
+current_keyword_index 可能越界
+必须避免 NaN 和 >100%
+
+三、UI 更新性能优化
+
+updateSearchStatus 避免频繁全量 DOM 重建
+keywordListContainer 不要每次全量 innerHTML 重建
+只在 activeTask 变化时更新 UI
+或做差异更新（diff）
+loadTasks 需减少 DOM 重绘
+避免 setInterval 每 3 秒全量重建 table
+可优化为只更新变化行或分页渲染
+
+四、任务控制逻辑修复
+
+stopSearchTask 后必须同步刷新任务状态
+调用 loadTasks()
+不可只更新 UI 文本
+resumeTask / deleteTask 增加错误处理
+检查 response.ok
+增加失败提示
+
+五、发现结果模块优化
+
+loadDiscovered 的筛选条件重建问题
+country/keyword select 每次刷新不能重置用户选择
+应缓存并保持当前 selection
+discovered 列表更新避免闪烁
+减少 innerHTML 全量替换频率
+
+六、网络请求健壮性
+
+所有 fetch 必须增加：
+timeout（AbortController）
+错误捕获统一处理
+
+七、数据安全与健壮性
+
+所有后端字段必须做类型保护：
+expanded_keywords 必须 array
+current_keyword_index 必须 number
+null/undefined 必须兜底处理
+防止 HTML 注入风险
+company_name / country / keyword / website 必须做 escape 或使用 textContent 渲染
+
+八、架构优化建议（可选但推荐）
+
+当前“setInterval + fetch + DOM 重绘”结构不稳定
+建议升级为：
+WebSocket / SSE 推送任务状态
+或前端状态管理（task store）
+目标：单一数据源（SSOT），避免 UI 与任务状态不一致
+
+修改目标：
+
+消除轮询重复与状态错乱问题
+提升大任务（50~200 keywords）下的流畅度
+保证任务状态与 UI 强一致性
+降低 API 请求压力
+提升前端整体稳定性
