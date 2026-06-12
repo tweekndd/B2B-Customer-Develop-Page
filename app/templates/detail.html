@@ -70,10 +70,10 @@
                 <!-- 跟进记录区 -->
                 <div class="col-12">
                     <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-clipboard-check"></i> 跟进记录</h6></div>
+                        <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-clipboard-check"></i> 跟进记录 &amp; 客户评级</h6></div>
                         <div class="card-body">
                             <div class="row g-2">
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label small">跟进状态</label>
                                     <select class="form-select form-select-sm" id="followUpStatus">
                                         <option value="待联系">待联系</option>
@@ -83,15 +83,26 @@
                                         <option value="成单">成单</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label small">下次跟进日期</label>
                                     <input type="date" class="form-control form-control-sm" id="followUpDate">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label small">备注</label>
                                     <input type="text" class="form-control form-control-sm" id="followUpNotes" placeholder="记录跟进备注...">
                                 </div>
-                                <div class="col-md-2 d-flex align-items-end">
+                                <div class="col-md-2">
+                                    <label class="form-label small">客户评级</label>
+                                    <select class="form-select form-select-sm" id="starRating">
+                                        <option value="0">未评级</option>
+                                        <option value="1">⭐ 1星</option>
+                                        <option value="2">⭐⭐ 2星</option>
+                                        <option value="3">⭐⭐⭐ 3星</option>
+                                        <option value="4">⭐⭐⭐⭐ 4星</option>
+                                        <option value="5">⭐⭐⭐⭐⭐ 5星</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
                                     <button class="btn btn-primary btn-sm w-100" onclick="saveFollowUp()"><i class="bi bi-save"></i> 保存</button>
                                 </div>
                             </div>
@@ -308,6 +319,7 @@
                 document.getElementById('followUpDate').value = '';
             }
             document.getElementById('followUpNotes').value = c.notes || '';
+            document.getElementById('starRating').value = c.star_rating || 0;
 
             // 抓取/分析状态在基本信息上显示图标
             let statusIcons = '';
@@ -368,10 +380,12 @@
             const status = document.getElementById('followUpStatus').value;
             const date = document.getElementById('followUpDate').value;
             const notes = document.getElementById('followUpNotes').value;
+            const star = document.getElementById('starRating').value;
             try {
                 let url = `/api/customers/${customerId}/follow-up?status=${encodeURIComponent(status)}`;
                 if (date) url += `&follow_up_date=${encodeURIComponent(date)}`;
                 if (notes) url += `&notes=${encodeURIComponent(notes)}`;
+                url += `&star_rating=${encodeURIComponent(star)}`;
                 const resp = await fetch(url, { method: 'POST' });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.detail || '保存失败');

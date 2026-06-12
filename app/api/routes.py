@@ -43,7 +43,7 @@ def _get_emails_list(customer: Customer) -> list:
 
 @router.get("/customers")
 def list_customers(
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, description="搜索关键词（支持公司名/网址/邮箱）"),
     country: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
     status: Optional[str] = Query(None, description="跟进状态筛选: 待联系/已发邮件/已回复/无效线索/成单"),
@@ -52,7 +52,12 @@ def list_customers(
 ):
     query = db.query(Customer)
     if search:
-        query = query.filter(Customer.company_name.ilike(f"%{search}%"))
+        # 多字段搜索：公司名 + 网址 + 邮箱内容
+        query = query.filter(
+            Customer.company_name.ilike(f"%{search}%")
+            | Customer.website.ilike(f"%{search}%")
+            | Customer.emails.ilike(f"%{search}%")
+        )
     if country:
         query = query.filter(Customer.country == country)
     if priority:
@@ -95,6 +100,8 @@ def list_customers(
             "scrape_status": c.scrape_status,
             "ai_status": c.ai_status,
             "fail_reason": c.fail_reason,
+            # V2.2 客户评级
+            "star_rating": c.star_rating or 0,
         })
 
     return {"customers": result, "total": len(result), "countries": country_list}
@@ -165,6 +172,8 @@ def get_customer_detail(customer_id: int, db: Session = Depends(get_db)):
         "scrape_status": customer.scrape_status,
         "ai_status": customer.ai_status,
         "fail_reason": customer.fail_reason,
+        # V2.2 客户评级
+        "star_rating": customer.star_rating or 0,
     }
 
 
@@ -545,9 +554,10 @@ def update_follow_up(
     status: str = Query(..., description="跟进状态: 待联系/已发邮件/已回复/无效线索/成单"),
     follow_up_date: Optional[str] = Query(None, description="下次跟进日期 (YYYY-MM-DD)"),
     notes: Optional[str] = Query("", description="跟进备注"),
+    star_rating: Optional[int] = Query(None, description="客户评级 (0=未评级, 1-5星)"),
     db: Session = Depends(get_db),
 ):
-    """更新客户跟进状态"""
+    """更新客户跟进状态和评级"""
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -564,9 +574,13 @@ def update_follow_up(
             raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD")
     if notes:
         customer.notes = notes
+    if star_rating is not None:
+        if star_rating < 0 or star_rating > 5:
+            raise HTTPException(status_code=400, detail="评级范围 0-5")
+        customer.star_rating = star_rating
     db.commit()
 
-    return {"message": "跟进状态已更新", "customer_id": customer.id, "status": customer.status}
+    return {"message": "跟进状态已更新", "customer_id": customer.id, "status": customer.status, "star_rating": customer.star_rating}
 
 
 # ═══════════════════════════════════════════

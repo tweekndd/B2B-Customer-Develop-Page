@@ -229,6 +229,98 @@ Customer 模型新增三个字段：
 
 ---
 
+## v2.2.2（2026-06-12）
+
+### 新增：客户评级、多字段搜索、数据库自动迁移
+
+#### ① 客户自定义评级（重要性标记）
+
+**问题描述：** 用户可以标记跟进状态，但缺乏一个独立于 AI 评分的「自定义重要性」标记。业务员想结合自己的判断给客户打星，区分哪些是自己认为重要的客户。
+
+**改进内容：**
+
+| 层面 | 修改 |
+|------|------|
+| **数据层** `database.py` | Customer 模型新增 `star_rating` 字段（Integer, 0=未评级, 1-5星），`init_db` 自动迁移添加该列 |
+| **API** `routes.py` | 列表/详情接口返回 `star_rating`；`follow-up` 接口新增 `star_rating` 参数，保存时一并提交 |
+| **列表页** `index.html` | 表头新增「评级」列，每行显示 ⭐ 星星图标（实心=已评级，空心=未评级） |
+| **详情页** `detail.html` | 跟进记录区新增「客户评级」下拉（未评级 / 1星 ~ 5星） |
+
+#### ② 多字段搜索增强
+
+**问题描述：** 搜索框只能搜公司名，输入网址或邮箱找不到任何结果。
+
+**改进内容：**
+
+`app/api/routes.py` — `list_customers` 接口的搜索逻辑从仅匹配 `company_name` 改为 `OR` 匹配三个字段：
+- `company_name`（公司名称）
+- `website`（官网网址）
+- `emails`（邮箱内容，JSON字符串模糊匹配）
+
+现在输入公司名、网址片段或邮箱都能搜到对应的客户。
+
+#### ③ 数据库自动迁移（Bug修复）
+
+**问题描述：** v2.2.1 新增了 6 个字段后，已有的 `customers.db` 文件不会自动加列，运行时报错 `no such column: customers.status`。
+
+**改进内容：**
+
+`app/database.py` — `init_db()` 新增 `_migrate_add_column()` 函数，每次启动时检查 `customers` 表的实际列清单，发现缺失的列自动执行 `ALTER TABLE ADD COLUMN`。支持的自动迁移列：
+- `status`、`follow_up_date`、`notes`
+- `scrape_status`、`ai_status`、`fail_reason`
+- `star_rating`
+
+重启即可自动补齐缺失列，无需手动操作数据库。
+
+---
+
+#### 涉及文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `app/database.py` | 新增 `star_rating` 字段；`init_db()` 新增自动迁移逻辑 `_migrate_add_column()` |
+| `app/api/routes.py` | 搜索改为多字段 OR（公司名/网址/邮箱）；列表/详情返回 `star_rating`；follow-up 接口支持 `star_rating` 参数 |
+| `app/templates/index.html` | 表头新增「评级」列，渲染 ⭐ 星星图标 |
+| `app/templates/detail.html` | 跟进记录区新增客户评级下拉；saveFollowUp 提交 `star_rating` |
+
+---
+
+## v2.2.3（2026-06-12）
+
+### 新增：Tavily 搜索引擎支持
+
+支持 Tavily API 作为 Google 搜索替代后端，通过环境变量动态切换。
+
+**新增文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `app/services/tavily_discovery.py` | Tavily 搜索客户端，调用 `POST /search` 接口，支持分页去重 |
+
+**修改文件：**
+
+| 文件 | 修改内容 |
+|------|----------|
+| `app/services/google_discovery.py` | 重构为统一入口：`search_google()` 根据 `SEARCH_ENGINE` 环境变量或自动检测选择 SerpAPI / Tavily 实现；原有 SerpAPI 逻辑保留为内部函数 |
+| `README.md` | 环境变量表新增 `TAVILY_API_KEY` 和 `SEARCH_ENGINE`，增加搜索引擎选择说明 |
+
+**切换方式（三种）：**
+
+```bash
+# 1. 自动检测（优先 Tavily）
+set TAVILY_API_KEY=tvly-your-key
+
+# 2. 强制指定
+set SEARCH_ENGINE=tavily
+set TAVILY_API_KEY=tvly-your-key
+
+# 3. 使用 SerpAPI（默认）
+set SEARCH_ENGINE=serpapi
+set SERPAPI_API_KEY=your-key
+```
+
+---
+
 ### 历史版本
 
 - **v2.0.1** —— 修复：停止任务按钮无响应问题

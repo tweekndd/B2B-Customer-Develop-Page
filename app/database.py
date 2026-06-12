@@ -68,6 +68,9 @@ class Customer(Base):
     ai_status = Column(String(20), nullable=True, comment="AI分析状态: success/failed/skipped")
     fail_reason = Column(String(500), nullable=True, comment="失败原因描述")
 
+    # V2.2 新增：客户自定义评级（1-5星，0=未评级）
+    star_rating = Column(Integer, default=0, comment="客户评级: 0未评级/1-5星")
+
 
 class SearchTask(Base):
     """搜索任务（V2.0 新增）"""
@@ -149,6 +152,7 @@ def init_db():
     _migrate_add_column(engine, "customers", "scrape_status", "VARCHAR(20)")
     _migrate_add_column(engine, "customers", "ai_status", "VARCHAR(20)")
     _migrate_add_column(engine, "customers", "fail_reason", "VARCHAR(500)")
+    _migrate_add_column(engine, "customers", "star_rating", "INTEGER DEFAULT 0")
 
 
 def _migrate_add_column(engine, table: str, column: str, col_type: str):

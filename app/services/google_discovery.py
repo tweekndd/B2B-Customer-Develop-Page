@@ -1,26 +1,42 @@
 """
-Google搜索发现服务（V2.2 升级）
-支持多语言搜索：根据目标国家自动设置 hl/lr/cr 参数
-通过 SerpAPI 调用 Google 搜索，稳定可靠，无需处理反爬
+搜索发现服务（V2.2 升级）
+统一搜索入口，支持 SerpAPI 和 Tavily 两种搜索引擎
+通过环境变量 SEARCH_ENGINE 切换：serpapi / tavily
+如果未设置 SEARCH_ENGINE，自动根据已配置的 API Key 决定
 """
+
 import os
 import asyncio
 from typing import List, Dict, Optional
-from urllib.parse import urlparse
-
-import httpx
 
 from app.services.country_language_map import get_language_info
 
+# ── 搜索引擎选择 ──
+# 优先级: SEARCH_ENGINE 环境变量 > 自动检测
+_SEARCH_ENGINE = os.environ.get("SEARCH_ENGINE", "").strip().lower()
 
-# SerpAPI 配置
-SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
-SERPAPI_URL = "https://serpapi.com/search"
 
-# 每次搜索获取的结果数量
-RESULTS_PER_PAGE = 10
+def _detect_search_engine() -> str:
+    """自动检测可用的搜索引擎"""
+    if _SEARCH_ENGINE in ("serpapi", "tavily"):
+        return _SEARCH_ENGINE
 
-# 搜索间隔（秒）
+    serpapi_key = os.environ.get("SERPAPI_API_KEY", "")
+    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+
+    if _SEARCH_ENGINE == "tavily":
+        return "tavily"
+    if _SEARCH_ENGINE == "serpapi":
+        return "serpapi"
+    # 自动检测
+    if tavily_key:
+        return "tavily"
+    if serpapi_key:
+        return "serpapi"
+    return "none"
+
+
+# 搜索间隔
 SEARCH_INTERVAL = 1.0
 
 
@@ -30,29 +46,53 @@ async def search_google(
     max_results: int = 50,
 ) -> List[Dict]:
     """
-    通过 SerpAPI 搜索 Google，返回搜索结果列表
-    支持多语言：自动根据 country 设置搜索语言和国家限制
+    统一搜索入口，根据配置自动选择搜索引擎
     每个结果包含：title, website, snippet
-    注意：每次API调用算一次搜索，翻页也会消耗配额
     """
+    engine = _detect_search_engine()
+    print(f"  使用搜索引擎: {engine}")
+
+    if engine == "tavily":
+        from app.services.tavily_discovery import search_tavily
+        return await search_tavily(keyword, country=country, max_results=max_results)
+    elif engine == "serpapi":
+        return await _search_via_serpapi(keyword, country, max_results)
+    else:
+        print("错误: 未配置任何搜索引擎。请设置 SERPAPI_API_KEY 或 TAVILY_API_KEY 环境变量")
+        return []
+
+
+# ═══════════════════════════════════════════
+# SerpAPI 实现
+# ═══════════════════════════════════════════
+
+SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
+SERPAPI_URL = "https://serpapi.com/search"
+RESULTS_PER_PAGE = 10
+
+
+async def _search_via_serpapi(
+    keyword: str,
+    country: str,
+    max_results: int = 50,
+) -> List[Dict]:
+    """通过 SerpAPI 搜索 Google"""
     if not SERPAPI_API_KEY:
-        print("错误: 未设置 SERPAPI_API_KEY 环境变量，无法使用 SerpAPI 搜索")
+        print("错误: 未设置 SERPAPI_API_KEY 环境变量")
         return []
 
     all_websites = set()
     results_list = []
 
-    # 最多获取的页数（限制最多5页=50条，节省API配额）
     max_pages = min((max_results + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE, 5)
 
-    # 从语言映射表获取完整参数
     lang_info = get_language_info(country) if country else None
 
     if lang_info:
-        country_code = lang_info["gl"]           # gl 参数（如 "pl", "es"）
-        hl_code = lang_info["hl"]               # hl 参数（如 "pl", "es"）
-        lr_code = lang_info["lr"]               # lr 参数（如 "lang_pl"）
-        cr_code = lang_info["cr"]               # cr 参数（如 "countryPL"）
+        country_code = lang_info["gl"]
+        hl_code = lang_info["hl"]
+        lr_code = lang_info["lr"]
+        cr_code = lang_info["cr"]
         language = lang_info["language"]
         print(f"  多语言搜索: {country} → {language} (hl={hl_code}, lr={lr_code}, cr={cr_code}, gl={country_code})")
     else:
@@ -61,19 +101,16 @@ async def search_google(
         lr_code = ""
         cr_code = ""
 
-    # 关键词直接用（如果是多语言模式，关键词已经是目标语言，无需拼接国家名）
     search_query = keyword
 
     for page in range(max_pages):
         start = page * RESULTS_PER_PAGE
-
-        results = await _fetch_via_serpapi(search_query, country_code, hl_code, lr_code, cr_code, start)
+        results = await _fetch_serpapi(search_query, country_code, hl_code, lr_code, cr_code, start)
 
         if not results:
             print(f"  SerpAPI 第{page+1}页无结果，停止翻页")
             break
 
-        # 去重
         new_count = 0
         for r in results:
             website = r.get("website", "")
@@ -86,26 +123,20 @@ async def search_google(
 
         if new_count == 0:
             break
-
         if page < max_pages - 1:
             await asyncio.sleep(SEARCH_INTERVAL)
 
     return results_list
 
 
-async def _fetch_via_serpapi(
-    query: str,
-    country_code: str,
-    hl_code: str = "en",
-    lr_code: str = "",
-    cr_code: str = "",
-    start: int = 0,
+async def _fetch_serpapi(
+    query: str, country_code: str, hl_code: str = "en",
+    lr_code: str = "", cr_code: str = "", start: int = 0,
 ) -> Optional[List[Dict]]:
-    """
-    调用 SerpAPI 获取 Google 搜索结果
-    支持多语言参数：hl（界面语言）、lr（结果语言限制）、cr（国家限制）
-    API 文档: https://serpapi.com/search-api
-    """
+    """调用 SerpAPI 接口"""
+    import httpx
+    from urllib.parse import urlparse
+
     params = {
         "api_key": SERPAPI_API_KEY,
         "engine": "google",
@@ -114,20 +145,17 @@ async def _fetch_via_serpapi(
         "start": start,
         "hl": hl_code,
     }
-
-    # 添加国家限制
     if country_code:
-        params["gl"] = country_code       # 地理位置（Google 会优先返回该地区结果）
+        params["gl"] = country_code
     if lr_code:
-        params["lr"] = lr_code            # 语言限制（只返回该语言的结果）
+        params["lr"] = lr_code
     if cr_code:
-        params["cr"] = cr_code            # 国家限制（只返回该国家/地区的结果）
+        params["cr"] = cr_code
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(SERPAPI_URL, params=params)
 
-            # 先检查HTTP状态
             if response.status_code != 200:
                 print(f"  SerpAPI HTTP {response.status_code}: {query[:40]}")
                 if response.status_code == 429:
@@ -135,28 +163,23 @@ async def _fetch_via_serpapi(
                     await asyncio.sleep(5)
                 return None
 
-            # 尝试解析JSON
             try:
                 data = response.json()
             except Exception:
-                # 返回的不是JSON，可能是余额不足或API Key无效的页面
                 text_preview = response.text[:300].replace("\n", " ")
-                print(f"  SerpAPI 返回非JSON响应(可能API Key无效或余额不足): {text_preview}")
+                print(f"  SerpAPI 返回非JSON响应: {text_preview}")
                 return None
 
-            # 检查SerpAPI返回的业务错误
             if "error" in data:
                 print(f"  SerpAPI 返回错误: {data['error']}")
                 return None
 
-            # 检查搜索配额是否用尽
             search_metadata = data.get("search_metadata", {})
             if search_metadata.get("status") == "Error":
                 error_msg = data.get("error", "未知错误")
                 print(f"  SerpAPI 搜索失败: {error_msg}")
                 return None
 
-            # 解析 organic_results
             return _parse_serpapi_response(data)
 
     except httpx.TimeoutException:
@@ -171,10 +194,8 @@ async def _fetch_via_serpapi(
 
 
 def _parse_serpapi_response(data: dict) -> List[Dict]:
-    """
-    解析 SerpAPI 返回的 JSON 数据
-    SerpAPI 返回格式: { "organic_results": [ { "title": ..., "link": ..., "snippet": ... } ] }
-    """
+    """解析 SerpAPI 返回结果"""
+    from urllib.parse import urlparse
     results = []
     organic_results = data.get("organic_results", [])
 
@@ -187,7 +208,6 @@ def _parse_serpapi_response(data: dict) -> List[Dict]:
             if not title or not link:
                 continue
 
-            # 验证URL是否有效
             parsed = urlparse(link)
             if not parsed.netloc:
                 continue
@@ -197,7 +217,6 @@ def _parse_serpapi_response(data: dict) -> List[Dict]:
                 "website": link,
                 "snippet": snippet[:300],
             })
-
         except Exception:
             continue
 

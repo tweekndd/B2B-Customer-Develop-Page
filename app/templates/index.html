@@ -156,8 +156,9 @@
                         <thead class="table-light">
                             <tr>
                                 <th>公司名称</th>
+                                <th style="min-width:100px">跟进状态</th>
                                 <th>国家</th>
-                                <th>状态</th>
+                                <th>评级</th>
                                 <th>来源</th>
                                 <th>邮箱</th>
                                 <th>总分</th>
@@ -166,7 +167,7 @@
                             </tr>
                         </thead>
                         <tbody id="customerTableBody">
-                            <tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size: 2rem;"></i><br>暂无数据，请先导入Excel文件或使用客户发现功能</td></tr>
+                            <tr><td colspan="9" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size: 2rem;"></i><br>暂无数据，请先导入Excel文件或使用客户发现功能</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -228,7 +229,7 @@
         function renderTable(data) {
             const tbody = document.getElementById('customerTableBody');
             if (!data.customers || data.customers.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size: 2rem;"></i><br>暂无匹配的客户数据</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size: 2rem;"></i><br>暂无匹配的客户数据</td></tr>`;
                 return;
             }
             const pBadge = { 'A': 'bg-danger', 'B': 'bg-warning text-dark', 'C': 'bg-info text-dark', 'D': 'bg-secondary' };
@@ -246,24 +247,35 @@
                 if (c.ai_status === 'skipped') return '<span class="badge bg-secondary" title="已跳过">⏭️</span>';
                 return '';
             }
+            // 星星评级
+            function stars(rating) {
+                const n = Number(rating) || 0;
+                let s = '';
+                for (let i = 1; i <= 5; i++) {
+                    s += i <= n ? '<i class="bi bi-star-fill text-warning"></i>' : '<i class="bi bi-star text-muted"></i>';
+                }
+                return s;
+            }
             let html = '';
             data.customers.forEach(c => {
                 const bc = pBadge[c.priority] || 'bg-secondary';
                 const sc = c.total_score >= 80 ? 'text-danger' : c.total_score >= 60 ? 'text-warning' : c.total_score >= 40 ? 'text-info' : 'text-muted';
                 const statusCls = statusBadge[c.status] || 'bg-secondary';
                 const statusLabel = c.status || '待联系';
+                const followDate = c.follow_up_date ? `<br><small class="text-muted">📅 ${_esc(c.follow_up_date)}</small>` : '';
                 const failTip = c.fail_reason ? ` title="${_esc(c.fail_reason)}"` : '';
                 sourceIcon = c.discovery_source === 'Google' ? '<span class="badge bg-info"><i class="bi bi-google"></i> Google</span>' : '<span class="badge bg-secondary"><i class="bi bi-upload"></i> 导入</span>';
                 html += `<tr>
-                    <td><a href="/customer/${c.id}" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
+                    <td><a href="/customer/${c.id}" target="_blank" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
+                    <td><span class="badge ${statusCls}">${_esc(statusLabel)}</span>${followDate}</td>
                     <td><span class="badge bg-light text-dark">${_esc(c.country) || '-'}</span></td>
-                    <td><span class="badge ${statusCls}">${_esc(statusLabel)}</span></td>
+                    <td class="small" style="white-space:nowrap">${stars(c.star_rating)}</td>
                     <td>${sourceIcon} ${scrapeIcon(c)} ${aiIcon(c)}</td>
                     <td><span class="badge bg-secondary">${c.email_count}</span></td>
                     <td class="${sc} fw-bold">${c.total_score ?? '-'}</td>
                     <td><span class="badge ${bc}">${c.priority || '-'}</span></td>
                     <td><div class="btn-group btn-group-sm">
-                        <a href="/customer/${c.id}" class="btn btn-outline-primary" title="查看详情"><i class="bi bi-eye"></i></a>
+                        <a href="/customer/${c.id}" target="_blank" class="btn btn-outline-primary" title="查看详情"><i class="bi bi-eye"></i></a>
                         <button class="btn btn-outline-success" onclick="analyzeSingle(${c.id})" title="分析"><i class="bi bi-lightning"></i></button>
                         <button class="btn btn-outline-warning" onclick="rescrapeCustomer(${c.id})" title="重新抓取"><i class="bi bi-arrow-clockwise"></i></button>
                         <button class="btn btn-outline-info" onclick="reanalyzeCustomer(${c.id})" title="重新AI分析"><i class="bi bi-robot"></i></button>

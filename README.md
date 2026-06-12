@@ -78,7 +78,13 @@ python main.py
 |------|--------|------|
 | `DEEPSEEK_API_URL` | `https://api.deepseek.com/v1/chat/completions` | 自定义 API 地址 |
 | `DEEPSEEK_MODEL` | `deepseek-v4-flash` | 自定义模型名称 |
-| `SERPAPI_API_KEY` | — | SerpAPI 密钥（搜索发现必需） |
+| `SERPAPI_API_KEY` | — | SerpAPI 密钥（二选一） |
+| `TAVILY_API_KEY` | — | Tavily 密钥（二选一） |
+| `SEARCH_ENGINE` | 自动检测 | 强制指定搜索引擎：`serpapi` 或 `tavily`。未设置时，自动根据已配置的 API Key 决定 |
+
+> **搜索引擎选择说明：** 系统同时支持 SerpAPI 和 Tavily 两种搜索后端。启动时按以下逻辑决定：
+> 1. 如果设置了 `SEARCH_ENGINE` 环境变量（`serpapi` 或 `tavily`），则强制使用指定引擎
+> 2. 未设置时，自动检测：优先使用 Tavily（如果有 `TAVILY_API_KEY`），否则使用 SerpAPI（如果有 `SERPAPI_API_KEY`）
 
 ### 5. 打开浏览器
 
