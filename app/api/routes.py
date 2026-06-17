@@ -48,11 +48,12 @@ def list_customers(
     priority: Optional[str] = Query(None),
     status: Optional[str] = Query(None, description="跟进状态筛选: 待联系/已发邮件/已回复/无效线索/成单"),
     sort_by_score: Optional[str] = Query("desc"),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(50, ge=10, le=200, description="每页条数（10-200）"),
     db: Session = Depends(get_db),
 ):
     query = db.query(Customer)
     if search:
-        # 多字段搜索：公司名 + 网址 + 邮箱内容
         query = query.filter(
             Customer.company_name.ilike(f"%{search}%")
             | Customer.website.ilike(f"%{search}%")
@@ -69,7 +70,17 @@ def list_customers(
     else:
         query = query.order_by(Customer.total_score.desc().nullslast())
 
-    customers = query.all()
+    total_count = query.count()
+    offset_val = (page - 1) * page_size
+    customers = query.offset(offset_val).limit(page_size).all()
+
+    # 统计数据合并返回
+    stats = {
+        "total": db.query(Customer).count(),
+        "analyzed": db.query(Customer).filter(Customer.analyzed_at.isnot(None)).count(),
+        "grade_a": db.query(Customer).filter(Customer.priority == "A").count(),
+        "google": db.query(Customer).filter(Customer.discovery_source == "Google").count(),
+    }
 
     all_countries = db.query(Customer.country).distinct().filter(
         Customer.country.isnot(None), Customer.country != ""
@@ -93,18 +104,23 @@ def list_customers(
             "is_analyzing": c.id in _analyzing_set,
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "analyzed_at": c.analyzed_at.isoformat() if c.analyzed_at else None,
-            # V2.2 跟进状态
             "status": c.status or "待联系",
             "follow_up_date": c.follow_up_date.isoformat() if c.follow_up_date else None,
-            # V2.2 抓取/分析状态
             "scrape_status": c.scrape_status,
             "ai_status": c.ai_status,
             "fail_reason": c.fail_reason,
-            # V2.2 客户评级
             "star_rating": c.star_rating or 0,
         })
 
-    return {"customers": result, "total": len(result), "countries": country_list}
+    return {
+        "customers": result,
+        "total": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total_count + page_size - 1) // page_size),
+        "countries": country_list,
+        "stats": stats,
+    }
 
 
 @router.get("/customers/{customer_id}")
@@ -425,6 +441,7 @@ def list_search_tasks(db: Session = Depends(get_db)):
             "error_message": t.error_message,
             "created_at": t.created_at.isoformat() if t.created_at else None,
             "finished_at": t.finished_at.isoformat() if t.finished_at else None,
+            "task_log": t.task_log or "",
         })
 
     # 标记当前活跃任务（优先 Running，其次 Pending）
@@ -701,3 +718,20 @@ async def reanalyze_customer(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"重新分析失败: {str(e)[:200]}")
     finally:
         _analyzing_set.discard(customer_id)
+
+
+# ═══════════════════════════════════════════
+# V2.5 新增：相似客户扩展（种子客户）
+# ═══════════════════════════════════════════
+
+@router.post("/discovery/similar-companies")
+async def api_find_similar_companies(
+    company_url: str = Query(..., description="目标公司网址"),
+    target_country: str = Query(..., description="目标国家"),
+    top_n: int = Query(50, ge=10, le=100, description="返回结果数量"),
+):
+    """基于公司网址寻找相似客户"""
+    from app.services.similar_company_finder import find_similar_companies
+
+    result = await find_similar_companies(company_url, target_country, top_n=top_n)
+    return result
