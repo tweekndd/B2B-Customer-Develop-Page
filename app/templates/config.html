@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>评分系统配置 - AI Trade Customer Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        .config-section { border-left: 3px solid #0d6efd; margin-bottom: 1.5rem; }
+        .config-section h5 { color: #0d6efd; }
+        .keyword-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; margin: 2px; background: #e9ecef; border-radius: 16px; font-size: 0.85rem; }
+        .keyword-tag .remove-btn { cursor: pointer; color: #dc3545; font-weight: bold; margin-left: 4px; }
+        .keyword-tag .remove-btn:hover { color: #a71d2a; }
+        .weight-input { width: 60px; text-align: center; }
+        .save-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 280px; }
+        .json-preview { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; font-family: 'Consolas', monospace; font-size: 0.8rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="bi bi-robot me-2"></i>
+                <span class="fw-bold">AI Trade Customer Analyzer V2.9</span>
+            </a>
+            <div class="d-flex align-items-center">
+                <a href="/" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-people"></i> 客户列表</a>
+                <a href="/discovery" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-search"></i> 客户发现</a>
+                <a href="/config" class="btn btn-sm btn-light me-2 active"><i class="bi bi-gear"></i> 评分配置</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+
+        <!-- 页面标题 + 操作栏 -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="mb-1"><i class="bi bi-gear-wide-connected"></i> 评分系统配置</h4>
+                <p class="text-muted mb-0 small">修改评分标准、行业关键词、国家权重等参数，保存后立即生效，无需重启服务</p>
+            </div>
+            <div>
+                <button class="btn btn-outline-secondary me-2" onclick="loadConfig()"><i class="bi bi-arrow-clockwise"></i> 重置表单</button>
+                <button class="btn btn-primary" onclick="saveConfig()"><i class="bi bi-floppy"></i> 保存全部配置</button>
+            </div>
+        </div>
+
+        <!-- 保存成功提示 -->
+        <div id="saveToast" class="save-toast d-none alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> <span id="saveToastMsg">配置已保存</span>
+            <button type="button" class="btn-close" onclick="this.parentElement.classList.add('d-none')"></button>
+        </div>
+
+        <div class="row">
+            <!-- 左栏：行业关键词 + 评分规则 -->
+            <div class="col-lg-8">
+
+                <!-- ──── ① 正向关键词（用于关键词分析） ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-plus-circle text-success"></i> 正向关键词</span>
+                        <span class="text-muted small">用于关键词分析，命中后参与评分</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-1 mb-3" id="positiveKeywordsContainer">
+                            <!-- JS 动态渲染 -->
+                        </div>
+                        <div class="input-group input-group-sm" style="max-width: 400px;">
+                            <input type="text" class="form-control" id="newPositiveKeyword" placeholder="输入新关键词" onkeydown="if(event.key==='Enter')addPositiveKeyword()">
+                            <button class="btn btn-outline-success" onclick="addPositiveKeyword()"><i class="bi bi-plus-lg"></i> 添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── ② 负向关键词（用于关键词分析） ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-dash-circle text-danger"></i> 负向关键词</span>
+                        <span class="text-muted small">命中后表示客户可能非目标</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-1 mb-3" id="negativeKeywordsContainer">
+                            <!-- JS 动态渲染 -->
+                        </div>
+                        <div class="input-group input-group-sm" style="max-width: 400px;">
+                            <input type="text" class="form-control" id="newNegativeKeyword" placeholder="输入新关键词" onkeydown="if(event.key==='Enter')addNegativeKeyword()">
+                            <button class="btn btn-outline-danger" onclick="addNegativeKeyword()"><i class="bi bi-plus-lg"></i> 添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── ③ 评分行业匹配权重 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-sliders"></i> 行业匹配度评分权重</span>
+                        <span class="text-muted small">满分 <input type="number" id="industryMaxScore" class="form-control form-control-sm d-inline-block weight-input" onchange="markDirty()"> 分</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">每个关键词命中后按权重加分（最高 5 分/词），总计不超过满分。</p>
+                        <table class="table table-sm table-borderless mb-0" id="industryWeightsTable">
+                            <thead><tr><th>关键词</th><th style="width:80px">权重</th><th style="width:40px"></th></tr></thead>
+                            <tbody id="industryWeightsBody">
+                                <!-- JS 动态渲染 -->
+                            </tbody>
+                        </table>
+                        <div class="input-group input-group-sm mt-2" style="max-width: 350px;">
+                            <input type="text" class="form-control" id="newIndustryKw" placeholder="新关键词" onkeydown="if(event.key==='Enter')addIndustryWeight()">
+                            <input type="number" class="form-control" id="newIndustryWt" placeholder="权重" value="3" style="width:70px" min="1" max="5">
+                            <button class="btn btn-outline-primary" onclick="addIndustryWeight()"><i class="bi bi-plus-lg"></i> 添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── ④ 项目匹配度 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-folder"></i> 项目匹配度</span>
+                        <span class="text-muted small">满分 <input type="number" id="projectMaxScore" class="form-control form-control-sm d-inline-block weight-input" onchange="markDirty()"> 分</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-medium">检测关键词（有项目页则加分）</label>
+                                <div class="d-flex flex-wrap gap-1 mb-2" id="projectDetectionContainer"></div>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="newProjectDetectKw" placeholder="如 projects" onkeydown="if(event.key==='Enter')addProjectDetectionKw()">
+                                    <button class="btn btn-outline-primary" onclick="addProjectDetectionKw()"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-medium">内容关键词（项目涉及则额外加分）</label>
+                                <div class="d-flex flex-wrap gap-1 mb-2" id="projectContentContainer"></div>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="newProjectContentKw" placeholder="如 wastewater" onkeydown="if(event.key==='Enter')addProjectContentKw()">
+                                    <button class="btn btn-outline-primary" onclick="addProjectContentKw()"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-3">
+                                <label class="form-label small">有项目页基础分</label>
+                                <input type="number" id="projectHasProjectBase" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">行业内容匹配加分</label>
+                                <input type="number" id="projectHasContentMatch" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">低相关度加分</label>
+                                <input type="number" id="projectLowRelevance" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label class="form-label small">有项目页提示文字</label>
+                                <input type="text" id="projectHasProjectLabel" class="form-control form-control-sm" placeholder="如：存在项目案例页面" onchange="markDirty()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">行业内容匹配提示文字</label>
+                                <input type="text" id="projectHasContentLabel" class="form-control form-control-sm" placeholder="如：项目涉足目标行业" onchange="markDirty()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">低相关度提示文字</label>
+                                <input type="text" id="projectLowRelevanceLabel" class="form-control form-control-sm" placeholder="如：项目与目标行业相关度低" onchange="markDirty()">
+                            </div>
+                            <div class="col-12 text-muted small mt-1">
+                                <i class="bi bi-info-circle"></i> 提示文字用于评分详情页展示，非水处理行业可自定义
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── ⑤ 公司类型评分 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-building"></i> 公司类型评分</span>
+                        <span class="text-muted small">满分 <input type="number" id="companyTypeMaxScore" class="form-control form-control-sm d-inline-block weight-input" onchange="markDirty()"> 分</span>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-borderless mb-0">
+                            <thead><tr><th>公司类型</th><th style="width:100px">分数</th><th style="width:40px"></th></tr></thead>
+                            <tbody id="companyTypeBody">
+                                <!-- JS 动态渲染 -->
+                            </tbody>
+                        </table>
+                        <div class="input-group input-group-sm mt-2" style="max-width: 350px;">
+                            <input type="text" class="form-control" id="newCompanyType" placeholder="如 EPC" onkeydown="if(event.key==='Enter')addCompanyType()">
+                            <input type="number" class="form-control" id="newCompanyTypeScore" placeholder="分数" value="10" style="width:70px" min="0" max="20">
+                            <button class="btn btn-outline-primary" onclick="addCompanyType()"><i class="bi bi-plus-lg"></i> 添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── ⑥ 联系方式评分 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-envelope"></i> 联系方式评分</span>
+                        <span class="text-muted small">根据邮箱数量阶梯给分</span>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-borderless mb-0">
+                            <thead><tr><th style="width:120px">最少邮箱数</th><th style="width:100px">得分</th><th style="width:40px"></th></tr></thead>
+                            <tbody id="contactTiersBody">
+                                <!-- JS 动态渲染 -->
+                            </tbody>
+                        </table>
+                        <div class="input-group input-group-sm mt-2" style="max-width: 350px;">
+                            <input type="number" class="form-control" id="newTierMin" placeholder="最少邮箱数" value="0" min="0">
+                            <input type="number" class="form-control" id="newTierScore" placeholder="得分" value="0" style="width:70px" min="0" max="10">
+                            <button class="btn btn-outline-primary" onclick="addTier()"><i class="bi bi-plus-lg"></i> 添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── ⑦ 优先级规则 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <span class="fw-bold"><i class="bi bi-bar-chart-steps"></i> 优先级规则</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-3">
+                                <label class="form-label small">A级 ≥</label>
+                                <input type="number" id="priorityAMin" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label small">B级 ≥</label>
+                                <input type="number" id="priorityBMin" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label small">C级 ≥</label>
+                                <input type="number" id="priorityCMin" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label small">D级 ≥</label>
+                                <input type="number" id="priorityDMin" class="form-control form-control-sm" onchange="markDirty()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 右栏：国家权重 + JSON 预览 -->
+            <div class="col-lg-4">
+
+                <!-- ──── ⑧ 国家权重 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-globe2"></i> 国家权重</span>
+                        <span class="text-muted small">满分 <input type="number" id="countryMaxScore" class="form-control form-control-sm d-inline-block weight-input" onchange="markDirty()"> 分</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">设置各国家的优先级分数（0=不关注，15=最高优先）</p>
+                        <table class="table table-sm table-borderless mb-0">
+                            <thead><tr><th>国家</th><th style="width:70px">权重</th><th style="width:30px"></th></tr></thead>
+                            <tbody id="countryWeightsBody">
+                                <!-- JS 动态渲染 -->
+                            </tbody>
+                        </table>
+                        <div class="input-group input-group-sm mt-2">
+                            <input type="text" class="form-control" id="newCountry" placeholder="国家名称" onkeydown="if(event.key==='Enter')addCountryWeight()">
+                            <input type="number" class="form-control" id="newCountryWeight" placeholder="权重" value="5" style="width:65px" min="0" max="15">
+                            <button class="btn btn-outline-primary" onclick="addCountryWeight()"><i class="bi bi-plus-lg"></i> 添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ──── JSON 预览 ──── -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-code-slash"></i> JSON 预览</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toggleJsonPreview()"><i class="bi bi-eye"></i> 查看</button>
+                    </div>
+                    <div class="card-body d-none" id="jsonPreviewBody">
+                        <p class="text-muted small">industry_config.json 完整内容</p>
+                        <div class="json-preview" id="jsonPreviewContent"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 底部保存栏 -->
+        <div class="card border-0 shadow-sm mb-4 bg-light">
+            <div class="card-body text-center">
+                <button class="btn btn-primary btn-lg px-5" onclick="saveConfig()"><i class="bi bi-floppy"></i> 保存全部配置</button>
+                <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle"></i> 保存后自动清除缓存，后续分析将使用新规则。已有客户不会重新评分。</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ═══════════════════════════════════════════
+        // 数据状态
+        // ═══════════════════════════════════════════
+        let _config = null;
+        let _dirty = false;
+
+        // ═══════════════════════════════════════════
+        // 带超时的 fetch
+        // ═══════════════════════════════════════════
+        async function _fetchWithTimeout(url, options = {}, timeout = 15000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeout);
+            try {
+                const resp = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(timer);
+                return resp;
+            } catch (err) {
+                clearTimeout(timer);
+                if (err.name === 'AbortError') throw new Error('请求超时');
+                throw err;
+            }
+        }
+
+        function _esc(str) {
+            if (str === null || str === undefined) return '';
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+
+        // ═══════════════════════════════════════════
+        // 加载配置
+        // ═══════════════════════════════════════════
+        async function loadConfig() {
+            try {
+                const resp = await _fetchWithTimeout('/api/config');
+                const data = await resp.json();
+                _config = data;
+                renderAll();
+                _dirty = false;
+            } catch (err) {
+                console.error('加载配置失败:', err);
+                alert('加载配置失败: ' + err.message);
+            }
+        }
+
+        function markDirty() { _dirty = true; }
+
+        // ═══════════════════════════════════════════
+        // 渲染所有配置项
+        // ═══════════════════════════════════════════
+        function renderAll() {
+            if (!_config) return;
+            const ic = _config.industry_config || {};
+            const cw = _config.country_weights || {};
+
+            // --- 正向关键词 ---
+            renderKeywordTags('positiveKeywordsContainer', ic.positive_keywords || [], 'removePositiveKeyword');
+
+            // --- 负向关键词 ---
+            renderKeywordTags('negativeKeywordsContainer', ic.negative_keywords || [], 'removeNegativeKeyword');
+
+            // --- 评分配置 ---
+            const sc = ic.scoring || {};
+
+            // 行业匹配权重
+            const im = sc.industry_match || {};
+            document.getElementById('industryMaxScore').value = im.max_score ?? 30;
+            renderIndustryWeights(im.keywords || {});
+
+            // 项目匹配
+            const pm = sc.project_match || {};
+            document.getElementById('projectMaxScore').value = pm.max_score ?? 25;
+            renderKeywordTags('projectDetectionContainer', pm.detection_keywords || [], 'removeProjectDetectionKw');
+            renderKeywordTags('projectContentContainer', pm.content_keywords || [], 'removeProjectContentKw');
+            document.getElementById('projectHasProjectBase').value = pm.has_project_base ?? 10;
+            document.getElementById('projectHasContentMatch').value = pm.has_content_match ?? 15;
+            document.getElementById('projectHasProjectLabel').value = pm.has_project_label ?? '存在项目案例页面';
+            document.getElementById('projectHasContentLabel').value = pm.has_content_label ?? '项目涉足目标行业';
+            document.getElementById('projectLowRelevanceLabel').value = pm.low_relevance_label ?? '项目与目标行业相关度低';
+            document.getElementById('projectLowRelevance').value = pm.low_relevance ?? 5;
+
+            // 公司类型
+            const ct = sc.company_type || {};
+            document.getElementById('companyTypeMaxScore').value = ct.max_score ?? 20;
+            renderCompanyTypes(ct.types || {});
+
+            // 联系方式
+            renderContactTiers((sc.contact || {}).tiers || []);
+
+            // 国家
+            document.getElementById('countryMaxScore').value = (sc.country || {}).max_score ?? 15;
+            renderCountryWeights(cw);
+
+            // 优先级
+            const pr = ic.priority_rules || {};
+            document.getElementById('priorityAMin').value = (pr.A || {}).min ?? 80;
+            document.getElementById('priorityBMin').value = (pr.B || {}).min ?? 60;
+            document.getElementById('priorityCMin').value = (pr.C || {}).min ?? 40;
+            document.getElementById('priorityDMin').value = (pr.D || {}).min ?? 0;
+        }
+
+        // ──── 通用关键词标签渲染 ────
+        function renderKeywordTags(containerId, keywords, removeFn) {
+            const container = document.getElementById(containerId);
+            if (!keywords || keywords.length === 0) {
+                container.innerHTML = '<span class="text-muted small">暂无关键词</span>';
+                return;
+            }
+            let html = '';
+            keywords.forEach(kw => {
+                html += `<span class="keyword-tag">${_esc(kw)} <span class="remove-btn" onclick="${removeFn}('${_esc(kw).replace(/'/g, "\\'")}')">✕</span></span>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // ──── 行业匹配权重表 ────
+        function renderIndustryWeights(kwMap) {
+            const tbody = document.getElementById('industryWeightsBody');
+            const entries = Object.entries(kwMap || {});
+            if (entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-muted small">暂无行业关键词</td></tr>';
+                return;
+            }
+            let html = '';
+            entries.forEach(([kw, weight]) => {
+                html += `<tr>
+                    <td>${_esc(kw)}</td>
+                    <td><input type="number" class="form-control form-control-sm weight-input" value="${weight}" min="1" max="5" data-industry-kw="${_esc(kw).replace(/"/g, '&quot;')}" onchange="updateIndustryWeight(this)"></td>
+                    <td><span class="text-danger" style="cursor:pointer" onclick="removeIndustryWeight('${_esc(kw).replace(/'/g, "\\'")}')">✕</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // ──── 公司类型表 ────
+        function renderCompanyTypes(types) {
+            const tbody = document.getElementById('companyTypeBody');
+            const entries = Object.entries(types || {});
+            if (entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-muted small">暂无公司类型</td></tr>';
+                return;
+            }
+            let html = '';
+            entries.forEach(([name, score]) => {
+                html += `<tr>
+                    <td>${_esc(name)}</td>
+                    <td><input type="number" class="form-control form-control-sm weight-input" value="${score}" min="0" max="20" data-ct-name="${_esc(name).replace(/"/g, '&quot;')}" onchange="updateCompanyTypeScore(this)"></td>
+                    <td><span class="text-danger" style="cursor:pointer" onclick="removeCompanyType('${_esc(name).replace(/'/g, "\\'")}')">✕</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // ──── 联系方式阶梯表 ────
+        function renderContactTiers(tiers) {
+            const tbody = document.getElementById('contactTiersBody');
+            if (!tiers || tiers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-muted small">暂无阶梯配置</td></tr>';
+                return;
+            }
+            let html = '';
+            tiers.forEach((tier, idx) => {
+                html += `<tr>
+                    <td><input type="number" class="form-control form-control-sm" value="${tier.min_emails}" min="0" data-tier-idx="${idx}" onchange="updateTier(${idx}, 'min_emails', this.value)"></td>
+                    <td><input type="number" class="form-control form-control-sm" value="${tier.score}" min="0" max="10" data-tier-idx="${idx}" onchange="updateTier(${idx}, 'score', this.value)"></td>
+                    <td><span class="text-danger" style="cursor:pointer" onclick="removeTier(${idx})">✕</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // ──── 国家权重表 ────
+        function renderCountryWeights(cw) {
+            const tbody = document.getElementById('countryWeightsBody');
+            const entries = Object.entries(cw || {});
+            if (entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-muted small">暂无国家权重</td></tr>';
+                return;
+            }
+            let html = '';
+            entries.forEach(([country, weight]) => {
+                html += `<tr>
+                    <td>${_esc(country)}</td>
+                    <td><input type="number" class="form-control form-control-sm weight-input" value="${weight}" min="0" max="15" data-country="${_esc(country).replace(/"/g, '&quot;')}" onchange="updateCountryWeight(this)"></td>
+                    <td><span class="text-danger" style="cursor:pointer" onclick="removeCountryWeight('${_esc(country).replace(/'/g, "\\'")}')">✕</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // ═══════════════════════════════════════════
+        // 增删改操作
+        // ═══════════════════════════════════════════
+
+        // 正向关键词
+        function addPositiveKeyword() {
+            const input = document.getElementById('newPositiveKeyword');
+            const kw = input.value.trim();
+            if (!kw) return;
+            const list = _config.industry_config.positive_keywords || [];
+            if (list.includes(kw)) { alert('关键词已存在'); return; }
+            list.push(kw);
+            renderKeywordTags('positiveKeywordsContainer', list, 'removePositiveKeyword');
+            input.value = '';
+            markDirty();
+        }
+        function removePositiveKeyword(kw) {
+            const list = _config.industry_config.positive_keywords || [];
+            const idx = list.indexOf(kw);
+            if (idx > -1) list.splice(idx, 1);
+            renderKeywordTags('positiveKeywordsContainer', list, 'removePositiveKeyword');
+            markDirty();
+        }
+
+        // 负向关键词
+        function addNegativeKeyword() {
+            const input = document.getElementById('newNegativeKeyword');
+            const kw = input.value.trim();
+            if (!kw) return;
+            const list = _config.industry_config.negative_keywords || [];
+            if (list.includes(kw)) { alert('关键词已存在'); return; }
+            list.push(kw);
+            renderKeywordTags('negativeKeywordsContainer', list, 'removeNegativeKeyword');
+            input.value = '';
+            markDirty();
+        }
+        function removeNegativeKeyword(kw) {
+            const list = _config.industry_config.negative_keywords || [];
+            const idx = list.indexOf(kw);
+            if (idx > -1) list.splice(idx, 1);
+            renderKeywordTags('negativeKeywordsContainer', list, 'removeNegativeKeyword');
+            markDirty();
+        }
+
+        // 行业匹配权重
+        function addIndustryWeight() {
+            const kw = document.getElementById('newIndustryKw').value.trim();
+            const wt = parseInt(document.getElementById('newIndustryWt').value) || 3;
+            if (!kw) return;
+            const keywords = _config.industry_config.scoring.industry_match.keywords || {};
+            if (keywords[kw] !== undefined) { alert('关键词已存在'); return; }
+            keywords[kw] = wt;
+            renderIndustryWeights(keywords);
+            document.getElementById('newIndustryKw').value = '';
+            markDirty();
+        }
+        function updateIndustryWeight(input) {
+            const kw = input.dataset.industryKw;
+            const val = parseInt(input.value) || 1;
+            _config.industry_config.scoring.industry_match.keywords[kw] = Math.min(Math.max(val, 1), 5);
+            markDirty();
+        }
+        function removeIndustryWeight(kw) {
+            delete _config.industry_config.scoring.industry_match.keywords[kw];
+            renderIndustryWeights(_config.industry_config.scoring.industry_match.keywords);
+            markDirty();
+        }
+
+        // 项目检测关键词
+        function addProjectDetectionKw() {
+            const input = document.getElementById('newProjectDetectKw');
+            const kw = input.value.trim();
+            if (!kw) return;
+            const list = _config.industry_config.scoring.project_match.detection_keywords || [];
+            if (list.includes(kw)) { alert('关键词已存在'); return; }
+            list.push(kw);
+            renderKeywordTags('projectDetectionContainer', list, 'removeProjectDetectionKw');
+            input.value = '';
+            markDirty();
+        }
+        function removeProjectDetectionKw(kw) {
+            const list = _config.industry_config.scoring.project_match.detection_keywords || [];
+            const idx = list.indexOf(kw);
+            if (idx > -1) list.splice(idx, 1);
+            renderKeywordTags('projectDetectionContainer', list, 'removeProjectDetectionKw');
+            markDirty();
+        }
+
+        // 项目内容关键词
+        function addProjectContentKw() {
+            const input = document.getElementById('newProjectContentKw');
+            const kw = input.value.trim();
+            if (!kw) return;
+            const list = _config.industry_config.scoring.project_match.content_keywords || [];
+            if (list.includes(kw)) { alert('关键词已存在'); return; }
+            list.push(kw);
+            renderKeywordTags('projectContentContainer', list, 'removeProjectContentKw');
+            input.value = '';
+            markDirty();
+        }
+        function removeProjectContentKw(kw) {
+            const list = _config.industry_config.scoring.project_match.content_keywords || [];
+            const idx = list.indexOf(kw);
+            if (idx > -1) list.splice(idx, 1);
+            renderKeywordTags('projectContentContainer', list, 'removeProjectContentKw');
+            markDirty();
+        }
+
+        // 公司类型
+        function addCompanyType() {
+            const name = document.getElementById('newCompanyType').value.trim();
+            const score = parseInt(document.getElementById('newCompanyTypeScore').value) || 0;
+            if (!name) return;
+            const types = _config.industry_config.scoring.company_type.types || {};
+            if (types[name] !== undefined) { alert('公司类型已存在'); return; }
+            types[name] = Math.min(Math.max(score, 0), 20);
+            renderCompanyTypes(types);
+            document.getElementById('newCompanyType').value = '';
+            markDirty();
+        }
+        function updateCompanyTypeScore(input) {
+            const name = input.dataset.ctName;
+            const val = parseInt(input.value) || 0;
+            _config.industry_config.scoring.company_type.types[name] = Math.min(Math.max(val, 0), 20);
+            markDirty();
+        }
+        function removeCompanyType(name) {
+            delete _config.industry_config.scoring.company_type.types[name];
+            renderCompanyTypes(_config.industry_config.scoring.company_type.types);
+            markDirty();
+        }
+
+        // 联系方式阶梯
+        function updateTier(idx, field, val) {
+            const tiers = _config.industry_config.scoring.contact.tiers || [];
+            if (tiers[idx]) tiers[idx][field] = parseInt(val) || 0;
+            markDirty();
+        }
+        function addTier() {
+            const min = parseInt(document.getElementById('newTierMin').value) || 0;
+            const score = parseInt(document.getElementById('newTierScore').value) || 0;
+            const tiers = _config.industry_config.scoring.contact.tiers || [];
+            tiers.push({ min_emails: min, score: score });
+            renderContactTiers(tiers);
+            document.getElementById('newTierMin').value = '0';
+            document.getElementById('newTierScore').value = '0';
+            markDirty();
+        }
+        function removeTier(idx) {
+            const tiers = _config.industry_config.scoring.contact.tiers || [];
+            tiers.splice(idx, 1);
+            renderContactTiers(tiers);
+            markDirty();
+        }
+
+        // 国家权重
+        function addCountryWeight() {
+            const country = document.getElementById('newCountry').value.trim();
+            const weight = parseInt(document.getElementById('newCountryWeight').value) || 5;
+            if (!country) return;
+            if (_config.country_weights[country] !== undefined) { alert('国家已存在'); return; }
+            _config.country_weights[country] = Math.min(Math.max(weight, 0), 15);
+            renderCountryWeights(_config.country_weights);
+            document.getElementById('newCountry').value = '';
+            markDirty();
+        }
+        function updateCountryWeight(input) {
+            const country = input.dataset.country;
+            const val = parseInt(input.value) || 0;
+            _config.country_weights[country] = Math.min(Math.max(val, 0), 15);
+            markDirty();
+        }
+        function removeCountryWeight(country) {
+            delete _config.country_weights[country];
+            renderCountryWeights(_config.country_weights);
+            markDirty();
+        }
+
+        // ═══════════════════════════════════════════
+        // 保存配置
+        // ═══════════════════════════════════════════
+        async function saveConfig() {
+            if (!_config) return;
+
+            // 从表单收集未绑定到 data-* 属性的字段
+            const ic = _config.industry_config;
+            const sc = ic.scoring;
+
+            // industry_match max_score
+            sc.industry_match.max_score = parseInt(document.getElementById('industryMaxScore').value) || 30;
+
+            // project_match 分值
+            sc.project_match.max_score = parseInt(document.getElementById('projectMaxScore').value) || 25;
+            sc.project_match.has_project_base = parseInt(document.getElementById('projectHasProjectBase').value) || 10;
+            sc.project_match.has_content_match = parseInt(document.getElementById('projectHasContentMatch').value) || 15;
+            sc.project_match.low_relevance = parseInt(document.getElementById('projectLowRelevance').value) || 5;
+            sc.project_match.has_project_label = document.getElementById('projectHasProjectLabel').value.trim() || '存在项目案例页面';
+            sc.project_match.has_content_label = document.getElementById('projectHasContentLabel').value.trim() || '项目涉足目标行业';
+            sc.project_match.low_relevance_label = document.getElementById('projectLowRelevanceLabel').value.trim() || '项目与目标行业相关度低';
+
+            // company_type max_score
+            sc.company_type.max_score = parseInt(document.getElementById('companyTypeMaxScore').value) || 20;
+
+            // country max_score
+            sc.country.max_score = parseInt(document.getElementById('countryMaxScore').value) || 15;
+
+            // priority_rules
+            ic.priority_rules = {
+                "A": { "min": parseInt(document.getElementById('priorityAMin').value) || 80, "max": 100 },
+                "B": { "min": parseInt(document.getElementById('priorityBMin').value) || 60, "max": 79 },
+                "C": { "min": parseInt(document.getElementById('priorityCMin').value) || 40, "max": 59 },
+                "D": { "min": parseInt(document.getElementById('priorityDMin').value) || 0, "max": 39 },
+            };
+
+            try {
+                // 1. 保存 industry_config
+                const resp1 = await _fetchWithTimeout('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ic),
+                }, 10000);
+                if (!resp1.ok) {
+                    const err = await resp1.json();
+                    throw new Error(err.detail || '保存 industry_config 失败');
+                }
+
+                // 2. 保存 country_weights
+                const resp2 = await _fetchWithTimeout('/api/config/country-weights', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(_config.country_weights),
+                }, 10000);
+                if (!resp2.ok) {
+                    const err = await resp2.json();
+                    throw new Error(err.detail || '保存 country_weights 失败');
+                }
+
+                showToast('✅ 配置已保存，新评分规则已生效');
+                _dirty = false;
+            } catch (err) {
+                showToast('❌ 保存失败: ' + err.message, 'danger');
+            }
+        }
+
+        // ═══════════════════════════════════════════
+        // Toast 提示
+        // ═══════════════════════════════════════════
+        function showToast(msg, type) {
+            type = type || 'success';
+            const toast = document.getElementById('saveToast');
+            toast.className = `save-toast alert alert-${type} alert-dismissible fade show`;
+            document.getElementById('saveToastMsg').textContent = msg;
+            toast.classList.remove('d-none');
+            setTimeout(() => toast.classList.add('d-none'), 5000);
+        }
+
+        // ═══════════════════════════════════════════
+        // JSON 预览切换
+        // ═══════════════════════════════════════════
+        function toggleJsonPreview() {
+            const body = document.getElementById('jsonPreviewBody');
+            body.classList.toggle('d-none');
+            if (!body.classList.contains('d-none')) {
+                document.getElementById('jsonPreviewContent').textContent =
+                    JSON.stringify(_config.industry_config, null, 2);
+            }
+        }
+
+        // ═══════════════════════════════════════════
+        // 导航离开时提示未保存
+        // ═══════════════════════════════════════════
+        window.addEventListener('beforeunload', (e) => {
+            if (_dirty) {
+                e.preventDefault();
+                e.returnValue = '有未保存的配置修改，确定离开吗？';
+            }
+        });
+
+        // ═══════════════════════════════════════════
+        // 初始化
+        // ═══════════════════════════════════════════
+        document.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>
