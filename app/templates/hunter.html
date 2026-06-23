@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+{% block title %}Hunter 邮箱查找 - AI Trade Customer Analyzer{% endblock %}
+
+{% block content %}
+<!-- 页面标题 -->
+<div class="page-header" data-animate>
+    <div>
+        <h4><i class="bi bi-envelope-at me-2"></i>Hunter 邮箱查找</h4>
+        <p class="text-muted mb-0 small">通过 Hunter.io API 查找公司内部联系人的工作邮箱，支持域名搜索和姓名精确查找</p>
+    </div>
+    <div>
+        <span id="hunterConfigBadge" class="badge rounded-pill bg-secondary">检查配置中...</span>
+    </div>
+</div>
+
+<!-- 快捷查找 -->
+<div class="card border-0 mb-4" data-animate>
+    <div class="card-header"><i class="bi bi-search"></i> 快捷查找邮箱</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">公司域名 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="hQuickDomain" placeholder="如 stripe.com">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">联系人名（可选）</label>
+                <input type="text" class="form-control" id="hQuickFirstName" placeholder="如 Patrick">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">联系人姓（可选）</label>
+                <input type="text" class="form-control" id="hQuickLastName" placeholder="如 Collison">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <button class="btn btn-accent w-100" onclick="quickHunterSearch()" id="btnQuickSearch">
+                    <i class="bi bi-search me-1"></i>查找
+                </button>
+            </div>
+        </div>
+        <div class="row g-3 mt-1">
+            <div class="col-md-3">
+                <label class="form-label">部门筛选</label>
+                <select class="form-select form-select-sm" id="hQuickDepartment">
+                    <option value="">所有部门</option>
+                    <option value="executive">高管</option>
+                    <option value="it">技术</option>
+                    <option value="sales">销售</option>
+                    <option value="marketing">市场</option>
+                    <option value="finance">财务</option>
+                    <option value="hr">人事</option>
+                    <option value="legal">法务</option>
+                    <option value="support">客服</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">级别筛选</label>
+                <select class="form-select form-select-sm" id="hQuickSeniority">
+                    <option value="">所有级别</option>
+                    <option value="junior">初级</option>
+                    <option value="senior">高级/总监</option>
+                    <option value="executive">高管/CXO</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 查找结果 -->
+<div id="hQuickResult" class="d-none mb-4"></div>
+<div id="hQuickLoading" class="d-none mb-4">
+    <div class="card border-0">
+        <div class="card-body text-center py-5">
+            <div class="spinner-border text-teal mb-3" role="status"></div>
+            <p class="text-muted">正在通过 Hunter 查询邮箱，请稍候...</p>
+            <div class="progress" style="max-width:300px;margin:0 auto;height:4px">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-teal" style="width:100%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 使用统计 -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4" data-animate data-delay="100">
+        <div class="card border-0 h-100">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> 配额统计</div>
+            <div class="card-body">
+                <div id="usageStatsContainer">
+                    <p class="text-muted small mb-0">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4" data-animate data-delay="200">
+        <div class="card border-0 h-100">
+            <div class="card-header"><i class="bi bi-database"></i> 缓存统计</div>
+            <div class="card-body">
+                <div id="cacheStatsContainer">
+                    <p class="text-muted small mb-0">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4" data-animate data-delay="300">
+        <div class="card border-0 h-100">
+            <div class="card-header"><i class="bi bi-tools"></i> 管理</div>
+            <div class="card-body d-flex flex-column gap-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="refreshUsage()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>刷新统计
+                </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="clearHunterCache()">
+                    <i class="bi bi-trash me-1"></i>清除缓存
+                </button>
+                <p class="text-muted small mb-0 mt-1">
+                    <i class="bi bi-info-circle"></i> 清除缓存后下次查询将消耗真实 API 额度。
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 使用说明 -->
+<div class="card border-0 mb-4" data-animate>
+    <div class="card-header"><i class="bi bi-book"></i> 使用说明</div>
+    <div class="card-body">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <h6 class="fw-semibold"><i class="bi bi-1-circle me-1"></i> 配置 API Key</h6>
+                <p class="text-muted small">
+                    在启动前设置环境变量 <code>HUNTER_API_KEY</code>：
+                </p>
+                <pre class="bg-light p-2 rounded" style="font-size:0.85rem"># Windows (cmd)
+set HUNTER_API_KEY=your_key_here
+
+# Windows (PowerShell)
+$env:HUNTER_API_KEY="your_key_here"
+
+# Linux/Mac
+export HUNTER_API_KEY=your_key_here</pre>
+                <p class="text-muted small">
+                    测试时可使用 <code>test-api-key</code>（返回测试数据）。
+                    <br>获取正式 Key：<a href="https://hunter.io/api-keys" target="_blank">https://hunter.io/api-keys</a>
+                </p>
+            </div>
+
+            <div class="col-md-6">
+                <h6 class="fw-semibold"><i class="bi bi-2-circle me-1"></i> 套餐额度</h6>
+                <table class="table table-sm small">
+                    <thead>
+                        <tr>
+                            <th>套餐</th>
+                            <th>搜索/月</th>
+                            <th>验证/月</th>
+                            <th>每页最多</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Free</td><td>25</td><td>50</td><td>10 条</td></tr>
+                        <tr><td>Starter</td><td>500</td><td>1,000</td><td>10 条</td></tr>
+                        <tr><td>Growth</td><td>5,000</td><td>10,000</td><td>100 条</td></tr>
+                        <tr><td>Business</td><td>15,000</td><td>30,000</td><td>100 条</td></tr>
+                    </tbody>
+                </table>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Free 和 Starter 不支持分页，最多返回 10 条结果。
+                </p>
+            </div>
+
+            <div class="col-md-6">
+                <h6 class="fw-semibold"><i class="bi bi-3-circle me-1"></i> 查找策略（额度优化）</h6>
+                <ol class="small text-muted" style="line-height:1.8">
+                    <li>
+                        <strong>Email Count（免费）</strong> — 先查该公司有多少邮箱，
+                        如果 total=0 直接返回，不消耗搜索额度。
+                    </li>
+                    <li>
+                        <strong>本地缓存优先</strong> — 所有结果缓存 7 天，
+                        相同域名+参数的查询直接从缓存读取。
+                    </li>
+                    <li>
+                        <strong>Domain Search 自带验证</strong> —
+                        域名搜索结果含 verification，不额外调用 Verifier。
+                    </li>
+                    <li>
+                        <strong>智能降级</strong> — 已知姓名时先在 Domain Search 结果中匹配，
+                        找不到才触发 Email Finder。
+                    </li>
+                    <li>
+                        <strong>结果过滤</strong> — 可在客户端按部门/级别筛选，
+                        无需多次 API 调用。
+                    </li>
+                </ol>
+            </div>
+
+            <div class="col-md-6">
+                <h6 class="fw-semibold"><i class="bi bi-4-circle me-1"></i> 集成到客户详情页</h6>
+                <p class="text-muted small">
+                    进入任意客户详情页 → 点击 <span class="badge bg-info">Hunter 查邮箱</span> 按钮 →
+                    系统自动使用该公司域名查询 Hunter 数据库 →
+                    可在输入框中填写联系人姓名进行精确查找。
+                </p>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-link-45deg me-1"></i>
+                    也可在导航栏点击 <strong>Hunter 邮箱</strong> 进入独立查找页面，
+                    直接输入域名和姓名进行搜索。
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // ── 检查配置状态 ──
+    async function checkHunterConfig() {
+        try {
+            const status = await _fetchWithTimeout('/api/hunter/status');
+            const badge = document.getElementById('hunterConfigBadge');
+            if (status.configured) {
+                if (status.test_mode) {
+                    badge.className = 'badge rounded-pill bg-warning text-dark';
+                    badge.textContent = '测试模式 (test-api-key)';
+                } else {
+                    badge.className = 'badge rounded-pill bg-success';
+                    badge.textContent = 'API Key 已配置';
+                }
+            } else {
+                badge.className = 'badge rounded-pill bg-danger';
+                badge.textContent = '未配置 API Key';
+            }
+        } catch (err) {
+            console.error('检查 Hunter 配置失败:', err);
+            document.getElementById('hunterConfigBadge').textContent = '配置检查失败';
+        }
+    }
+
+    // ── 快速查找 ──
+    async function quickHunterSearch() {
+        const domain = document.getElementById('hQuickDomain').value.trim();
+        if (!domain) {
+            showToast('请输入公司域名', 'warning');
+            return;
+        }
+
+        const firstName = document.getElementById('hQuickFirstName').value.trim();
+        const lastName = document.getElementById('hQuickLastName').value.trim();
+        const dept = document.getElementById('hQuickDepartment').value;
+        const seniority = document.getElementById('hQuickSeniority').value;
+
+        // 显示加载
+        document.getElementById('hQuickLoading').classList.remove('d-none');
+        document.getElementById('hQuickResult').classList.add('d-none');
+        const btn = document.getElementById('btnQuickSearch');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>查找中...';
+
+        try {
+            let url = `/api/hunter/find-emails?domain=${encodeURIComponent(domain)}`;
+            if (firstName) url += `&first_name=${encodeURIComponent(firstName)}`;
+            if (lastName) url += `&last_name=${encodeURIComponent(lastName)}`;
+            if (dept) url += `&department=${encodeURIComponent(dept)}`;
+            if (seniority) url += `&seniority=${encodeURIComponent(seniority)}`;
+
+            const data = await _fetchWithTimeout(url, {}, 20000);
+            renderQuickResult(data);
+        } catch (err) {
+            const resultEl = document.getElementById('hQuickResult');
+            resultEl.classList.remove('d-none');
+            resultEl.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>查询失败: ${_esc(err.message)}</div>`;
+        } finally {
+            document.getElementById('hQuickLoading').classList.add('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>查找';
+        }
+    }
+
+    function renderQuickResult(data) {
+        const resultEl = document.getElementById('hQuickResult');
+        resultEl.classList.remove('d-none');
+
+        if (data.total_available === 0) {
+            resultEl.innerHTML = `
+                <div class="card border-0">
+                    <div class="card-body">
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Hunter 数据库中未找到 <strong>${_esc(data.domain)}</strong> 的邮箱数据。
+                        </div>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        const emails = data.emails || [];
+        const quotaInfo = data.quota_used || {};
+        const searchUsed = (quotaInfo.domain_search || 0) + (quotaInfo.email_finder || 0);
+
+        let html = `
+            <div class="card border-0">
+                <div class="card-header d-flex justify-content-between">
+                    <span><i class="bi bi-envelope-fill me-1"></i> ${_esc(data.domain)} 的邮箱</span>
+                    <span class="text-muted small">
+                        共 ${data.total_available} 个可用 | 本次消耗 ${searchUsed} 次搜索
+                    </span>
+                </div>
+                <div class="card-body p-0">`;
+
+        if (emails.length === 0) {
+            html += `
+                <div class="p-3">
+                    <div class="alert alert-warning mb-0">
+                        <i class="bi bi-search me-1"></i>
+                        该公司共有 ${data.total_available} 个邮箱，但未匹配到筛选条件。
+                    </div>
+                </div>`;
+        } else {
+            html += `
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>邮箱</th>
+                                <th>姓名</th>
+                                <th>职位</th>
+                                <th>置信度</th>
+                                <th>验证</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            emails.forEach(e => {
+                const email = e.value || e.email || '';
+                const name = [e.first_name, e.last_name].filter(Boolean).join(' ') || '-';
+                const position = e.position || '-';
+                const confidence = e.confidence || 0;
+                const verification = e.verification || {};
+                const vStatus = verification.status || 'unknown';
+                const vBadge = vStatus === 'valid' ? 'success' : vStatus === 'accept_all' ? 'warning text-dark' : 'secondary';
+                const vLabel = vStatus === 'valid' ? '✅ 有效' : vStatus === 'accept_all' ? '⚠️ 待验证' : '❓ 未知';
+                const confBadge = confidence >= 90 ? 'success' : confidence >= 70 ? 'warning text-dark' : 'secondary';
+
+                html += `<tr>
+                    <td><code style="font-size:0.85rem">${_esc(email)}</code></td>
+                    <td>${_esc(name)}</td>
+                    <td><small>${_esc(position)}</small></td>
+                    <td><span class="badge bg-${confBadge}">${confidence}%</span></td>
+                    <td><span class="badge bg-${vBadge}" style="font-size:0.75rem">${vLabel}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="_copyText('${_esc(email)}')" title="复制邮箱">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+        }
+
+        html += `</div></div>`;
+        resultEl.innerHTML = html;
+    }
+
+    // ── 配额统计 ──
+    async function refreshUsage() {
+        try {
+            const data = await _fetchWithTimeout('/api/hunter/usage');
+
+            // 配额统计
+            const usage = data.session_usage || {};
+            const usageHtml = `
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Email Count（免费）</span>
+                    <span class="fw-medium">${usage.email_count || 0}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Domain Search</span>
+                    <span class="fw-medium">${usage.domain_search || 0}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Email Finder</span>
+                    <span class="fw-medium">${usage.email_finder || 0}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Email Verifier</span>
+                    <span class="fw-medium">${usage.email_verifier || 0}</span>
+                </div>
+                <hr class="my-2">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted small">缓存命中</span>
+                    <span class="fw-medium text-success">${usage.cache_hits || 0}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted small">实际搜索消耗</span>
+                    <span class="fw-medium text-warning">${usage.total_searches || 0}</span>
+                </div>
+            `;
+            document.getElementById('usageStatsContainer').innerHTML = usageHtml;
+
+            // 缓存统计
+            const cache = data.cache || {};
+            if (cache.enabled) {
+                const byTypeHtml = Object.entries(cache.by_type || {})
+                    .map(([k, v]) => `<span class="badge bg-secondary me-1">${k}: ${v}条</span>`)
+                    .join('');
+                const cacheHtml = `
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted small">缓存条目总数</span>
+                        <span class="fw-medium">${cache.total_entries || 0}</span>
+                    </div>
+                    <div class="mb-0">
+                        <span class="text-muted small">类型分布</span>
+                        <div class="mt-1">${byTypeHtml || '<span class="text-muted small">暂无</span>'}</div>
+                    </div>
+                `;
+                document.getElementById('cacheStatsContainer').innerHTML = cacheHtml;
+            } else {
+                document.getElementById('cacheStatsContainer').innerHTML = '<p class="text-muted small mb-0">缓存功能不可用（无数据库连接）</p>';
+            }
+        } catch (err) {
+            document.getElementById('usageStatsContainer').innerHTML = `<p class="text-danger small mb-0">加载失败: ${_esc(err.message)}</p>`;
+        }
+    }
+
+    // ── 清除缓存 ──
+    async function clearHunterCache() {
+        if (!confirm('确定要清除所有 Hunter 缓存吗？下次查询将消耗真实 API 额度。')) return;
+        try {
+            const data = await _fetchWithTimeout('/api/hunter/clear-cache', { method: 'POST' });
+            showToast(data.message, 'success');
+            refreshUsage();
+        } catch (err) {
+            showToast('清除失败: ' + err.message, 'danger');
+        }
+    }
+
+    // ── 按回车触发查找 ──
+    document.addEventListener('DOMContentLoaded', () => {
+        checkHunterConfig();
+        refreshUsage();
+
+        // 回车键触发查找
+        const inputs = ['hQuickDomain', 'hQuickFirstName', 'hQuickLastName'];
+        inputs.forEach(id => {
+            document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') quickHunterSearch();
+            });
+        });
+    });
+</script>
+{% endblock %}

@@ -123,6 +123,19 @@ class WebsiteCache(Base):
     last_crawled = Column(DateTime, nullable=True, comment="上次抓取时间")
 
 
+class HunterCache(Base):
+    """Hunter API 查询缓存（V3.0 新增，避免重复消耗搜索/验证额度）"""
+    __tablename__ = "hunter_cache"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    cache_key = Column(String(500), nullable=False, unique=True, index=True, comment="缓存唯一键: domain|type|params")
+    domain = Column(String(255), nullable=False, index=True, comment="公司域名")
+    query_type = Column(String(30), nullable=False, comment="查询类型: email_count/domain_search/email_finder/email_verifier")
+    result = Column(Text, nullable=False, comment="API 返回结果 (JSON)")
+    hits = Column(Integer, default=1, comment="缓存命中次数（辅助统计）")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
+
+
 class AnalysisCache(Base):
     """AI分析缓存（V2.0 新增，避免重复调用DeepSeek）"""
     __tablename__ = "analysis_cache"
@@ -163,6 +176,8 @@ def init_db():
     _migrate_add_column(engine, "customers", "star_rating", "INTEGER DEFAULT 0")
     # 搜索任务表字段
     _migrate_add_column(engine, "search_tasks", "task_log", "TEXT")
+    # Hunter 缓存表字段
+    _migrate_add_column(engine, "hunter_cache", "hits", "INTEGER DEFAULT 1")
 
 
 def _migrate_add_column(engine, table: str, column: str, col_type: str):

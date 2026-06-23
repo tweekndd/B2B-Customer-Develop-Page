@@ -1,5 +1,93 @@
 # 更新日志
 
+## v3.0.0（2026-06-23）
+
+### 🌟 Hunter.io 邮箱查找集成 — 配额优化 & 智能缓存
+
+#### ① Hunter 服务层（`hunter_service.py`）
+
+**新增 `app/services/hunter_service.py`** — 完整的 Hunter API 客户端，内置 5 层配额优化策略：
+
+| 优化策略 | 说明 |
+|:---------|:------|
+| **本地缓存优先** | 所有查询结果写入 SQLite `hunter_cache` 表，缓存 7 天，相同查询不消耗额度 |
+| **Email Count 预检** | 始终先调用免费 Email Count API，total=0 直接返回，不消耗搜索额度 |
+| **Domain Search 自带验证** | 返回结果含 verification，不再额外调用 Email Verifier |
+| **智能降级** | 有姓名时先在 Domain Search 缓存中匹配，找不到才触发 Email Finder（低至 1 次搜索/人） |
+| **请求间隔控制** | 内置 0.3 秒请求延迟 + 429 自动重试，避免触发 Hunter 速率限制 |
+
+**核心类 `HunterClient`：**
+- `email_count(domain)` — 检查数据量（免费）
+- `domain_search(domain, department, seniority)` — 按域名全量搜索
+- `email_finder(domain, first_name, last_name)` — 按姓名精确查找
+- `email_verifier(email)` — 验证邮箱
+- `smart_find_emails(domain, first_name, last_name)` — 智能流程（推荐使用）
+- `get_usage_stats()` / `get_cache_stats()` — 配额 / 缓存统计
+
+**配额跟踪：** 进程内全局计数器记录 email_count / domain_search / email_finder / email_verifier / cache_hits，用户可实时查看已消耗的搜索和验证次数。
+
+#### ② Hunter API 路由（`api/hunter.py`）
+
+| 接口 | 方法 | 说明 |
+|:-----|:-----|:------|
+| `/api/hunter/status` | GET | 检查 API Key 配置状态 |
+| `/api/hunter/email-count` | GET | 查询域名邮箱总量（免费） |
+| `/api/hunter/find-emails` | GET | 智能查找（含额度优化策略） |
+| `/api/hunter/find-person` | GET | 精确查找某人邮箱（强制 Email Finder） |
+| `/api/hunter/usage` | GET | 配额使用统计 + 缓存统计 |
+| `/api/hunter/clear-cache` | POST | 清除所有 Hunter 缓存 |
+| `/api/hunter/cache-entries` | GET | 列出缓存条目 |
+
+#### ③ 数据库新增 `HunterCache` 模型
+
+- 字段：`cache_key`（MD5 唯一键）/ `domain` / `query_type` / `result`（JSON）/ `hits`（命中次数）/ `created_at`
+- 自动迁移：启动时检查并创建 `hunter_cache` 表，已有数据库无需手动迁移
+
+#### ④ 前端集成
+
+**客户详情页（`detail.html`）：**
+- 操作栏新增「Hunter 查邮箱」按钮
+- 新增 Hunter 查找卡片（支持输入姓名 + 部门筛选）
+- 结果以表格展示（邮箱、姓名、职位、置信度、验证状态、复制按钮）
+- 显示本次消耗的搜索额度，帮助用户控制配额
+
+**Hunter 独立页面（`/hunter` 路线）：**
+- 快捷查找区：输入域名 + 姓名 + 部门/级别筛选，一键搜索
+- 配额统计卡片：实时显示搜索/验证/缓存命中次数
+- 缓存管理：查看缓存条目类型分布 + 一键清除
+- 完整使用说明：API 配置 / 套餐额度 / 优化策略 / 集成指引
+
+**导航栏：** 新增「Hunter 邮箱」菜单项
+
+#### ⑤ 配置方式
+
+Hunter API Key 通过环境变量配置（与已有 TAVILY_API_KEY / SERPAPI_API_KEY 模式一致）：
+```bash
+set HUNTER_API_KEY=your_key_here      # Windows cmd
+$env:HUNTER_API_KEY="your_key_here"   # PowerShell
+export HUNTER_API_KEY=your_key_here   # Linux/Mac
+```
+测试时使用 `test-api-key`（返回测试数据不消耗额度）。
+
+---
+
+### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/services/hunter_service.py` | **新建** — Hunter API 客户端 + 缓存层 + 配额管理 |
+| `app/api/hunter.py` | **新建** — 7 个 API 接口 |
+| `app/templates/hunter.html` | **新建** — Hunter 使用教程 + 快捷查找页面 |
+| `app/database.py` | 修改 — 新增 HunterCache 模型 + 自动迁移 |
+| `app/api/__init__.py` | 修改 — 注册 hunter 路由 |
+| `app/templates/base.html` | 修改 — 导航栏新增 Hunter 邮箱链接 |
+| `app/templates/detail.html` | 修改 — 操作栏 + 查找卡片 + JS 交互 |
+| `main.py` | 修改 — 新增 `/hunter` 路由 + 版本号 V3.0 |
+| `app/static/js/app.js` | 无需修改（复用已有工具函数） |
+| `CHANGELOG.md` | 修改 — 本次更新日志 |
+
+---
+
 ## v2.9.0（2026-06-22）
 
 ### 🔧 P1 级优化 — 并发安全 & 行业解耦 & 集成测试

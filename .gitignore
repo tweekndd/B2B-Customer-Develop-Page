@@ -32,5 +32,19 @@ Thumbs.db
 .env
 *.env.local
 
+# Logs
+*.log
+
+# Debug
+debug_main.py
+debug_*.py
+
+# Reference docs
+Hunter's API Reference V2.html
+Hunter's API Reference V2_files/
+people-api-search.md
+people-enrichment.md
+"Hunter\351\202\256\347\256\261\346\237\245\346\211\276\346\226\271\346\241\210.md"
+
 # Uploads
 app/uploads/

@@ -77,6 +77,10 @@
         <button class="btn btn-outline-danger" onclick="stopAndBack()" id="btnStopDetail" style="display:none;">
             <i class="bi bi-stop-circle me-1"></i>停止并返回
         </button>
+        <div class="divider"></div>
+        <button class="btn btn-outline-info" onclick="hunterLookup()" id="btnHunter">
+            <i class="bi bi-envelope-at me-1"></i>Hunter 查邮箱
+        </button>
         <button class="btn btn-outline-secondary" onclick="window.location.href='/'">
             <i class="bi bi-arrow-left me-1"></i>返回列表
         </button>
@@ -126,6 +130,52 @@
                     </div>
                     <div id="followUpSaved" class="d-none small text-success mt-2">
                         <i class="bi bi-check-circle-fill"></i> 已保存
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hunter 邮箱查找 -->
+        <div class="col-12" data-animate>
+            <div class="card border-0">
+                <div class="card-header">
+                    <i class="bi bi-envelope-at"></i> Hunter 邮箱查找
+                    <span class="ms-auto text-muted small fw-normal" id="hunterStatus"></span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">联系人名（可选）</label>
+                            <input type="text" class="form-control form-control-sm" id="hunterFirstName" placeholder="如 Patrick">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">联系人姓（可选）</label>
+                            <input type="text" class="form-control form-control-sm" id="hunterLastName" placeholder="如 Collison">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">部门筛选（可选）</label>
+                            <select class="form-select form-select-sm" id="hunterDepartment">
+                                <option value="">所有部门</option>
+                                <option value="executive">高管</option>
+                                <option value="it">技术</option>
+                                <option value="sales">销售</option>
+                                <option value="marketing">市场</option>
+                                <option value="finance">财务</option>
+                                <option value="hr">人事</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-accent btn-sm w-100" onclick="hunterLookup()" id="btnHunterLookup">
+                                <i class="bi bi-search me-1"></i>查找邮箱
+                            </button>
+                        </div>
+                    </div>
+                    <div id="hunterResult" class="mt-3 d-none"></div>
+                    <div id="hunterLoading" class="mt-3 d-none">
+                        <div class="d-flex align-items-center gap-2 text-muted">
+                            <div class="spinner-border spinner-border-sm"></div>
+                            <span>正在通过 Hunter 查询邮箱...</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -519,6 +569,132 @@
         } catch (err) {
             showToast('重新分析失败: ' + err.message, 'danger');
         }
+    }
+
+    // ── Hunter 邮箱查找 ──
+    async function hunterLookup() {
+        // 获取客户网址
+        const websiteLink = document.getElementById('website');
+        const website = websiteLink ? (websiteLink.textContent || '').trim() : '';
+        if (!website || website === '-') {
+            showToast('该客户没有官网地址，无法使用 Hunter 查找邮箱', 'warning');
+            return;
+        }
+
+        // 显示加载
+        const loadingEl = document.getElementById('hunterLoading');
+        const resultEl = document.getElementById('hunterResult');
+        const btn = document.getElementById('btnHunterLookup');
+        loadingEl.classList.remove('d-none');
+        resultEl.classList.add('d-none');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>查找中...';
+
+        try {
+            const firstName = document.getElementById('hunterFirstName').value.trim();
+            const lastName = document.getElementById('hunterLastName').value.trim();
+            const dept = document.getElementById('hunterDepartment').value;
+
+            let url = `/api/hunter/find-emails?website=${encodeURIComponent(website)}`;
+            if (firstName) url += `&first_name=${encodeURIComponent(firstName)}`;
+            if (lastName) url += `&last_name=${encodeURIComponent(lastName)}`;
+            if (dept) url += `&department=${encodeURIComponent(dept)}`;
+
+            const data = await _fetchWithTimeout(url, {}, 20000);
+            renderHunterResult(data, resultEl);
+        } catch (err) {
+            resultEl.classList.remove('d-none');
+            resultEl.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>查询失败: ${_esc(err.message)}</div>`;
+        } finally {
+            loadingEl.classList.add('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>查找邮箱';
+        }
+    }
+
+    function renderHunterResult(data, container) {
+        container.classList.remove('d-none');
+
+        if (data.total_available === 0) {
+            container.innerHTML = `
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Hunter 数据库中未找到该公司 (${_esc(data.domain)}) 的邮箱数据。
+                    <br><small class="text-muted">可能原因：公司规模较小、Hunter 尚未抓取到该公司的公开邮箱。</small>
+                </div>`;
+            return;
+        }
+
+        // 更新状态显示
+        const statusEl = document.getElementById('hunterStatus');
+        statusEl.innerHTML = `<span class="badge bg-info">该域名共 ${data.total_available} 个邮箱</span>`;
+
+        const emails = data.emails || [];
+        if (emails.length === 0) {
+            container.innerHTML = `
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-search me-1"></i>
+                    该公司共有 ${data.total_available} 个邮箱，但未匹配到符合条件的联系人。
+                    <br><small class="text-muted">尝试不填姓名或更换部门筛选条件。</small>
+                </div>`;
+            return;
+        }
+
+        // 显示结果来源（节省的额度）
+        const sourceLabels = {
+            'cache': '来自缓存',
+            'domain_search': 'Domain Search',
+            'email_finder': 'Email Finder',
+        };
+        const source = sourceLabels[data.source] || data.source || '未知';
+        const quotaInfo = data.quota_used || {};
+        const searchUsed = (quotaInfo.domain_search || 0) + (quotaInfo.email_finder || 0);
+
+        let html = `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small">来源: <strong>${source}</strong></span>
+                <span class="text-muted small">本次消耗: ${searchUsed} 次搜索额度</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>邮箱</th>
+                            <th>姓名</th>
+                            <th>职位</th>
+                            <th>置信度</th>
+                            <th>验证状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        emails.forEach(e => {
+            const email = e.value || e.email || '';
+            const name = [e.first_name, e.last_name].filter(Boolean).join(' ') || '-';
+            const position = e.position || '-';
+            const confidence = e.confidence || 0;
+            const verification = e.verification || {};
+            const vStatus = verification.status || 'unknown';
+            const vBadge = vStatus === 'valid' ? 'success' : vStatus === 'accept_all' ? 'warning' : 'secondary';
+            const vLabel = vStatus === 'valid' ? '有效' : vStatus === 'accept_all' ? '待验证' : '未知';
+
+            html += `<tr>
+                <td><code style="font-size:0.85rem">${_esc(email)}</code></td>
+                <td>${_esc(name)}</td>
+                <td>${_esc(position)}</td>
+                <td><span class="badge bg-${confidence >= 90 ? 'success' : confidence >= 70 ? 'warning' : 'secondary'}">${confidence}%</span></td>
+                <td><span class="badge bg-${vBadge}">${vLabel}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="_copyText('${_esc(email)}')" title="复制邮箱">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
     }
 
     // ── 初始化 ──
