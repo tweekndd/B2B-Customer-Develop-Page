@@ -1,8 +1,8 @@
-# AI Trade Customer Analyzer V2.9
+# AI Trade Customer Analyzer V3.1
 
-**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库平台
+**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + Hunter 邮箱查找
 
-自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → 生成开发切入点，一站式完成。
+自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter 查找关键联系人邮箱 → 生成开发切入点，一站式完成。
 
 ---
 
@@ -20,6 +20,7 @@
 | **网页配置编辑器** | 通过网页修改行业关键词、评分权重、国家优先级，保存后即时生效，无需重启 |
 | **网页配置编辑器** | 通过网页修改行业关键词、评分权重、国家优先级，保存后即时生效，无需重启 |
 | **相似客户扩展** | 输入公司网址 + 目标国家，自动搜索相似客户，支持多语言本地化搜索 |
+| **Hunter 邮箱查找** | 通过 Hunter.io API 查找公司内部联系人的工作邮箱。支持域名搜索、姓名精确查找、部门/级别筛选，含本地缓存层和额度优化策略 |
 | **智能去重** | 域名 + 标准化公司名双重去重，自动合并重复发现的关键词 |
 | **三级缓存** | 搜索缓存(30天) + 官网缓存(7天) + AI分析缓存(内容哈希) — 避免重复消耗 API 配额 |
 | **断点续跑** | 搜索任务意外中断后，重新启动自动从断点继续 |
@@ -57,6 +58,11 @@ pip install -r requirements.txt
 #### TAVILY（搜索发现功能必填）
 - 前往https://www.tavily.com/)](https://www.tavily.com/) 注册获取 API Key
 - 免费账户每月 1000 次搜索查询
+
+#### Hunter.io（邮箱查找功能，可选）
+- 前往 https://hunter.io/api-keys 注册获取 API Key
+- 免费套餐每月 25 次搜索 + 50 次验证查询
+- 测试时可使用 `test-api-key`（返回模拟测试数据）
   
 ### 4. 启动系统
 
@@ -91,6 +97,9 @@ python main.py
 | `TAVILY_API_KEY` | — | Tavily 密钥（二选一） |
 | `SEARCH_ENGINE` | 自动检测 | 强制指定搜索引擎：`serpapi` 或 `tavily`。未设置时，自动根据已配置的 API Key 决定 |
 | `DATABASE_URL` | SQLite | PostgreSQL 连接字符串，如 `postgresql://user:pass@host/db` |
+| `HUNTER_API_KEY` | — | Hunter.io API Key。配置后在页面显示"已配置"，可使用邮箱查找功能 |
+| `HUNTER_CACHE_TTL` | `604800` (7天) | Hunter 查询结果在本地缓存的秒数 |
+| `HUNTER_REQUEST_DELAY` | `0.3` | Hunter API 请求间隔秒数，避免触发速率限制 |
 
 > **搜索引擎选择说明：** 系统同时支持 SerpAPI 和 Tavily 两种搜索后端。启动时按以下逻辑决定：
 > 1. 如果设置了 `SEARCH_ENGINE` 环境变量（`serpapi` 或 `tavily`），则强制使用指定引擎
@@ -132,6 +141,21 @@ python main.py
 - **识别项目**：AI 从官网提取的项目信息
 - **官网原文**：抓取的纯文本内容
 
+### Hunter 邮箱查找
+
+系统集成 Hunter.io API，可从客户详情页或独立页面查找公司联系人邮箱：
+
+- **详情页集成**：进入客户详情 → 点击「Hunter 查邮箱」按钮 → 系统自动使用该公司域名查询 → 可填写联系人姓名精确查找
+- **独立查找页**：导航栏点击「Hunter 邮箱」进入专用页面，直接输入域名和姓名搜索
+- **查找策略（额度优化）**：
+  1. **Email Count（免费）** — 先查该公司有多少邮箱，total=0 直接返回，不消耗搜索额度
+  2. **本地缓存优先** — 结果缓存 7 天，相同查询直接从缓存读取
+  3. **Domain Search 自带验证** — 不额外调用 Verifier 消耗验证额度
+  4. **智能降级** — 已知姓名时先在 Domain Search 结果中匹配，找不到才触发 Email Finder
+  5. **结果过滤** — 可按部门（高管/技术/销售/市场等）和级别（初级/高级/高管）筛选
+
+> **注意：** 使用前需设置 `HUNTER_API_KEY` 环境变量。免费套餐每月 25 次搜索查询。
+
 ---
 
 ## 项目结构
@@ -142,15 +166,16 @@ AI-Trade-Customer-Analyzer/
 ├── 产品评审报告-V2.7.md              # 产品评审报告
 ├── requirements.txt                 # 依赖清单
 ├── app/
-│   ├── database.py                  # 数据库模型（6张表）
+│   ├── database.py                  # 数据库模型（7张表，含 HunterCache）
 │   ├── database_init.py             # 数据库初始化
 │   ├── api/
-│   │   ├── __init__.py              # 路由器聚合（V2.8 重构）
-│   │   ├── routes.py                # 兼容层（V2.8 后为薄包装）
-│   │   ├── customers.py             # 客户管理 API（V2.8 拆分）
-│   │   ├── discovery.py             # 客户发现 API（V2.8 拆分）
-│   │   ├── sync.py                  # 数据同步 API（V2.8 拆分）
-│   │   └── config.py                # 配置管理 API（V2.8 新增）
+│   │   ├── __init__.py              # 路由器聚合（V3.1 含 Hunter 路由）
+│   │   ├── routes.py                # 兼容层
+│   │   ├── customers.py             # 客户管理 API
+│   │   ├── discovery.py             # 客户发现 API
+│   │   ├── sync.py                  # 数据同步 API
+│   │   ├── config.py                # 配置管理 API
+│   │   └── hunter.py                # Hunter 邮箱查找 API（V3.0 新增）
 │   ├── services/
 │   │   ├── excel_importer.py        # Excel 导入
 │   │   ├── website_scraper.py       # 官网抓取（异步）
@@ -165,17 +190,19 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── url_normalizer.py        # 网址标准化
 │   │   ├── company_filter.py        # 结果过滤
 │   │   ├── retry_manager.py         # 失败重试
-    │   │   ├── similar_company_finder.py# V2.5 相似客户扩展
-    │   │   ├── deduplication.py         # V2.6 智能去重工具
+│   │   ├── similar_company_finder.py# 相似客户扩展
+│   │   ├── deduplication.py         # 智能去重工具
+│   │   ├── hunter_service.py        # Hunter.io API 客户端（V3.0 新增）
 │   │   ├── industry_config.json     # 行业配置中心
 │   │   └── country_weights.json     # 国家权重配置
 │   ├── static/css/
 │   │   └── style.css
 │   └── templates/
 │       ├── index.html               # 客户列表页
-│       ├── detail.html              # 客户详情页
+│       ├── detail.html              # 客户详情页（含 Hunter 邮箱查找）
 │       ├── discovery.html           # 客户发现页
-│       └── config.html              # 评分系统配置页（V2.8 新增）
+│       ├── config.html              # 评分系统配置页
+│       └── hunter.html              # Hunter 邮箱查找页（V3.0 新增）
 ```
 
 ---
@@ -189,6 +216,7 @@ AI-Trade-Customer-Analyzer/
 | `search_cache` | 搜索结果缓存（30天有效） |
 | `website_cache` | 官网抓取缓存（7天有效） |
 | `analysis_cache` | AI 分析缓存（内容哈希比对） |
+| `hunter_cache` | Hunter 邮箱查询缓存（7天有效，自动记录命中次数） |
 
 ---
 
@@ -260,5 +288,6 @@ pytest tests/ -q     # 简洁输出
 - **后端**：FastAPI + SQLAlchemy + SQLite
 - **前端**：Bootstrap 5 + JavaScript
 - **AI**：DeepSeek API
-- **搜索**：SerpAPI (Google Search API)
+- **搜索**：SerpAPI / Tavily
+- **邮箱**：Hunter.io API（本地 SQLite 缓存层，7天 TTL）
 - **爬虫**：httpx + BeautifulSoup（异步并发）
