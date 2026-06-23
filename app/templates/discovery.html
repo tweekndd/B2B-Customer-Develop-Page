@@ -1,852 +1,725 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>客户发现 - AI Trade Customer Analyzer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css" rel="stylesheet">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}客户发现 - AI Trade Customer Analyzer{% endblock %}
 
-    <nav class="navbar navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand d-flex align-items-center" href="/">
-                <i class="bi bi-robot me-2"></i>
-                <span class="fw-bold">AI Trade Customer Analyzer V2.9</span>
-            </a>
-            <div class="d-flex align-items-center">
-                <a href="/" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-people"></i> 客户列表</a>
-                <a href="/discovery" class="btn btn-sm btn-outline-light me-2 active"><i class="bi bi-search"></i> 客户发现</a>
-                <a href="/config" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-gear"></i> 评分配置</a>
+{% block content %}
+<!-- 新建搜索任务 -->
+<div class="card border-0 mb-4" data-animate>
+    <div class="card-header">
+        <i class="bi bi-search"></i> 客户发现（Google 搜索 + AI 分析）
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">目标国家 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="discoveryCountry" placeholder="例如: Saudi Arabia" value="Saudi Arabia">
             </div>
-        </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
-
-        <!-- 新建搜索任务 -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><i class="bi bi-search"></i> 客户发现（Google搜索 + AI分析）</h5>
+            <div class="col-md-4">
+                <label class="form-label">行业关键词 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="discoveryKeyword" placeholder="例如: wastewater contractor" value="wastewater contractor">
             </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-medium">Country <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="discoveryCountry" placeholder="例如: Saudi Arabia" value="Saudi Arabia">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-medium">Keyword <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="discoveryKeyword" placeholder="例如: wastewater contractor" value="wastewater contractor">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-medium">Search Depth</label>
-                        <input type="number" class="form-control" id="discoveryDepth" value="50" min="10" max="200">
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-primary w-100" onclick="startSearch()" id="btnStartSearch">
-                            <i class="bi bi-play-fill"></i> Start Search
-                        </button>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <button class="btn btn-outline-info btn-sm" onclick="previewKeywords()" id="btnPreview">
-                            <i class="bi bi-magic"></i> 预览扩展关键词
-                        </button>
-                        <span id="previewResult" class="ms-2 small text-muted"></span>
-                    </div>
-                </div>
+            <div class="col-md-2">
+                <label class="form-label">搜索深度</label>
+                <input type="number" class="form-control" id="discoveryDepth" value="50" min="10" max="200">
             </div>
-        </div>
-
-        <!-- 相似客户扩展（种子客户） -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><i class="bi bi-diagram-3"></i> 相似客户扩展（种子客户）</h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-5">
-                        <label class="form-label fw-medium">目标公司网址 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="seedUrl" placeholder="例如: https://example-water.com">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-medium">目标国家 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="seedCountry" placeholder="例如: Mexico" value="Mexico">
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end">
-                        <button class="btn btn-success w-100" onclick="findSimilarCompanies()" id="btnFindSimilar">
-                            <i class="bi bi-diagram-3"></i> 查找相似客户
-                        </button>
-                    </div>
-                </div>
-                <div id="similarProgress" class="d-none mt-3">
-                    <div class="d-flex align-items-center text-muted small">
-                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                        <span id="similarStatusText">正在分析目标公司并搜索相似客户...</span>
-                    </div>
-                    <div class="progress mt-2" style="height:6px">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:100%"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 相似客户结果展示 -->
-        <div id="similarResultCard" class="d-none card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold"><i class="bi bi-diagram-3 text-success"></i> 相似客户结果</span>
-                <span class="badge bg-success" id="similarCount">0 个</span>
-            </div>
-            <div class="card-body">
-                <!-- 种子公司信息 -->
-                <div id="seedInfo" class="alert alert-light border mb-3 small">
-                    <strong>种子公司：</strong><span id="seedName"></span>
-                    <span class="ms-3"><strong>行业：</strong><span id="seedIndustry"></span></span>
-                    <span class="ms-3"><strong>关键词：</strong><span id="seedKeywords"></span></span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>#</th>
-                                <th>公司名称</th>
-                                <th>网址</th>
-                                <th>国家</th>
-                                <th>相似度</th>
-                            </tr>
-                        </thead>
-                        <tbody id="similarTableBody">
-                            <tr><td colspan="5" class="text-center text-muted py-3">暂无结果</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- 搜索状态提示（实时进度） -->
-        <div id="searchRunningBar" class="d-none alert alert-warning mb-3">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-hourglass-split me-2"></i>
-                    <div>
-                        <strong id="searchStatusText">搜索任务进行中...</strong>
-                        <br>
-                        <small class="text-muted" id="searchProgressDetail">等待中...</small>
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-outline-danger" onclick="stopSearchTask()"><i class="bi bi-stop-circle"></i> 停止任务</button>
-            </div>
-            <!-- 进度条 -->
-            <div class="progress mt-2" style="height: 8px;">
-                <div id="searchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width: 0%"></div>
-            </div>
-            <!-- 扩展关键词列表（折叠） -->
-            <div class="mt-2">
-                <button class="btn btn-sm btn-link p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#keywordListCollapse" aria-expanded="false">
-                    <i class="bi bi-list-ul"></i> 查看扩展关键词列表 <i class="bi bi-chevron-down small"></i>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-accent w-100" onclick="startSearch()" id="btnStartSearch">
+                    <i class="bi bi-play-fill me-1"></i>开始搜索
                 </button>
-                <div class="collapse mt-1" id="keywordListCollapse">
-                    <div id="keywordListContainer" class="d-flex flex-wrap gap-1"></div>
-                </div>
             </div>
         </div>
-
-        <!-- 搜索任务列表 -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold"><i class="bi bi-list-task"></i> 搜索任务历史</span>
-                <button class="btn btn-sm btn-outline-primary" onclick="loadTasks()"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>ID</th>
-                                <th>国家</th>
-                                <th>关键词</th>
-                                <th>扩展关键词数</th>
-                                <th>状态</th>
-                                <th>发现网站</th>
-                                <th>新增公司</th>
-                                <th>进度</th>
-                                <th>时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="taskTableBody">
-                            <tr><td colspan="10" class="text-center text-muted py-4">暂无搜索任务</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- 发现结果列表 -->
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold"><i class="bi bi-globe"></i> Google发现的公司</span>
-                <span class="badge bg-info" id="discoveredCount">0 个</span>
-            </div>
-            <div class="card-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-4">
-                        <input type="text" class="form-control form-control-sm" id="discSearch" placeholder="搜索..." oninput="loadDiscovered(true)">
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm" id="discCountry" onchange="loadDiscovered(true)">
-                            <option value="">所有国家</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <select class="form-select form-select-sm" id="discPriority" onchange="loadDiscovered(true)">
-                            <option value="">所有优先级</option>
-                            <option value="A">A级</option><option value="B">B级</option>
-                            <option value="C">C级</option><option value="D">D级</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm" id="discKeyword" onchange="loadDiscovered(true)">
-                            <option value="">所有关键词</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Company</th>
-                                <th>Country</th>
-                                <th>Website</th>
-                                <th>Emails</th>
-                                <th>发现关键词</th>
-                                <th>评分</th>
-                                <th>优先级</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="discoveredTableBody">
-                            <tr><td colspan="8" class="text-center text-muted py-4">暂无发现结果，请先运行搜索任务</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <!-- 分页控件 -->
-                <nav class="mt-3" id="discPagination" style="display:none">
-                    <ul class="pagination pagination-sm justify-content-center mb-0">
-                        <li class="page-item" id="discPrevPage"><a class="page-link" href="#" onclick="changeDiscPage(-1)">上一页</a></li>
-                        <li class="page-item disabled"><a class="page-link" href="#" id="discPageInfo">1/1</a></li>
-                        <li class="page-item" id="discNextPage"><a class="page-link" href="#" onclick="changeDiscPage(1)">下一页</a></li>
-                    </ul>
-                </nav>
+        <div class="row mt-3">
+            <div class="col-12">
+                <button class="btn btn-outline-primary btn-sm" onclick="previewKeywords()" id="btnPreview">
+                    <i class="bi bi-magic me-1"></i>预览扩展关键词
+                </button>
+                <span id="previewResult" class="ms-2 small text-muted"></span>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 任务日志弹窗 -->
-    <div class="modal fade" id="taskLogModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-journal-text"></i> 任务执行日志 - <span id="taskLogTitle">#0</span></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="taskLogBody" style="max-height: 500px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
-                    <p class="text-muted">加载中...</p>
-                </div>
+<!-- 相似客户扩展 -->
+<div class="card border-0 mb-4" data-animate data-delay="100">
+    <div class="card-header">
+        <i class="bi bi-diagram-3"></i> 相似客户扩展（种子客户）
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label">目标公司网址 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="seedUrl" placeholder="例如: https://example-water.com">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">目标国家 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="seedCountry" placeholder="例如: Mexico" value="Mexico">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="findSimilarCompanies()" id="btnFindSimilar">
+                    <i class="bi bi-diagram-3 me-1"></i>查找相似客户
+                </button>
+            </div>
+        </div>
+        <div id="similarProgress" class="d-none mt-3">
+            <div class="d-flex align-items-center text-muted small">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <span id="similarStatusText">正在分析目标公司并搜索相似客户...</span>
+            </div>
+            <div class="progress mt-2" style="height:6px">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:100%"></div>
             </div>
         </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- 相似客户结果 -->
+<div id="similarResultCard" class="d-none card border-0 mb-4" data-animate>
+    <div class="card-header d-flex justify-content-between">
+        <span><i class="bi bi-diagram-3"></i> 相似客户结果</span>
+        <span class="badge bg-success rounded-pill" id="similarCount">0 个</span>
+    </div>
+    <div class="card-body">
+        <div id="seedInfo" class="alert alert-light border mb-3 small py-2">
+            <strong>种子公司：</strong><span id="seedName"></span>
+            <span class="ms-3"><strong>行业：</strong><span id="seedIndustry"></span></span>
+            <span class="ms-3"><strong>关键词：</strong><span id="seedKeywords"></span></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>公司名称</th>
+                        <th>网址</th>
+                        <th>国家</th>
+                        <th>相似度</th>
+                    </tr>
+                </thead>
+                <tbody id="similarTableBody">
+                    <tr><td colspan="5"><div class="table-empty-state" style="padding:1.5rem"><i class="bi bi-search"></i>暂无结果</div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-    <script>
-        // ═══════════════════════════════════════════
-        // 轮询管理（单例，避免多个 setInterval 并存）
-        // ═══════════════════════════════════════════
-        let _pollTimer = null;
-        let _activeTaskId = null;        // 后端标记的当前活跃任务ID
-        let _lastActiveTaskKey = '';      // 用于判断activeTask是否变化，避免无效DOM重建
+<!-- 搜索状态提示 -->
+<div id="searchRunningBar" class="d-none alert alert-warning alert-banner mb-3" data-animate>
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-hourglass-split"></i>
+            <div>
+                <strong id="searchStatusText">搜索任务进行中...</strong>
+                <br>
+                <small class="text-muted" id="searchProgressDetail">等待中...</small>
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-danger" onclick="stopSearchTask()">
+            <i class="bi bi-stop-circle me-1"></i>停止任务
+        </button>
+    </div>
+    <div class="progress mt-2" style="height:8px">
+        <div id="searchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width:0%"></div>
+    </div>
+    <div class="mt-2">
+        <button class="btn btn-sm btn-link p-0 text-decoration-none text-muted" type="button" data-bs-toggle="collapse" data-bs-target="#keywordListCollapse">
+            <i class="bi bi-list-ul"></i> 查看扩展关键词列表 <i class="bi bi-chevron-down small"></i>
+        </button>
+        <div class="collapse mt-1" id="keywordListCollapse">
+            <div id="keywordListContainer" class="d-flex flex-wrap gap-1"></div>
+        </div>
+    </div>
+</div>
 
-        function startPolling() {
-            if (_pollTimer) return;        // 已存在则不重复创建
-            _pollTimer = setInterval(_pollTick, 3000);
+<!-- 搜索任务历史 -->
+<div class="card border-0 mb-4" data-animate data-delay="100">
+    <div class="card-header d-flex justify-content-between">
+        <span><i class="bi bi-list-task"></i> 搜索任务历史</span>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadTasks()"><i class="bi bi-arrow-clockwise me-1"></i>刷新</button>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>国家</th>
+                        <th>关键词</th>
+                        <th>扩展数</th>
+                        <th>状态</th>
+                        <th>发现网站</th>
+                        <th>新增公司</th>
+                        <th>进度</th>
+                        <th>时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="taskTableBody">
+                    <tr><td colspan="10"><div class="table-empty-state" style="padding:1.5rem"><i class="bi bi-inbox"></i>暂无搜索任务</div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 发现结果列表 -->
+<div class="card border-0" data-animate data-delay="200">
+    <div class="card-header d-flex justify-content-between">
+        <span><i class="bi bi-globe"></i> Google 发现的公司</span>
+        <span class="badge bg-secondary rounded-pill" id="discoveredCount">0 个</span>
+    </div>
+    <div class="card-body">
+        <div class="filter-bar mb-3">
+            <input type="text" class="form-control" id="discSearch" placeholder="搜索公司名称..." oninput="loadDiscovered(true)">
+            <select class="form-select" id="discCountry" onchange="loadDiscovered(true)">
+                <option value="">所有国家</option>
+            </select>
+            <select class="form-select" id="discPriority" onchange="loadDiscovered(true)">
+                <option value="">所有优先级</option>
+                <option value="A">A 级</option><option value="B">B 级</option>
+                <option value="C">C 级</option><option value="D">D 级</option>
+            </select>
+            <select class="form-select" id="discKeyword" onchange="loadDiscovered(true)">
+                <option value="">所有关键词</option>
+            </select>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>公司名称</th>
+                        <th>国家</th>
+                        <th>网址</th>
+                        <th>邮箱</th>
+                        <th>发现关键词</th>
+                        <th>评分</th>
+                        <th>优先级</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="discoveredTableBody">
+                    <tr><td colspan="8"><div class="table-empty-state" style="padding:1.5rem"><i class="bi bi-search"></i>暂无发现结果，请先运行搜索任务</div></td></tr>
+                </tbody>
+            </table>
+        </div>
+        <nav class="mt-3" id="discPagination" style="display:none">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                <li class="page-item" id="discPrevPage"><a class="page-link" href="#" onclick="changeDiscPage(-1)"><i class="bi bi-chevron-left"></i> 上一页</a></li>
+                <li class="page-item disabled"><a class="page-link" href="#" id="discPageInfo">1/1</a></li>
+                <li class="page-item" id="discNextPage"><a class="page-link" href="#" onclick="changeDiscPage(1)">下一页 <i class="bi bi-chevron-right"></i></a></li>
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<!-- 任务日志弹窗 -->
+<div class="modal fade" id="taskLogModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-journal-text me-2"></i>任务执行日志 - <span id="taskLogTitle">#0</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="taskLogBody" style="max-height:500px;overflow-y:auto;font-family:var(--font-mono);font-size:0.85rem">
+                <p class="text-muted">加载中...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // ═══════════════════════════════════════════
+    // 轮询管理
+    // ═══════════════════════════════════════════
+    let _pollTimer = null;
+    let _activeTaskId = null;
+    let _lastActiveTaskKey = '';
+
+    function startPolling() {
+        if (_pollTimer) return;
+        _pollTimer = setInterval(_pollTick, 3000);
+    }
+
+    function clearPolling() {
+        if (_pollTimer) {
+            clearInterval(_pollTimer);
+            _pollTimer = null;
         }
+    }
 
-        function clearPolling() {
-            if (_pollTimer) {
-                clearInterval(_pollTimer);
-                _pollTimer = null;
-            }
+    window.addEventListener('beforeunload', clearPolling);
+
+    function _checkShouldPoll() {
+        if (_activeTaskId === null && _pollTimer) {
+            clearPolling();
         }
+    }
 
-        // 页面关闭/刷新时清理
-        window.addEventListener('beforeunload', clearPolling);
+    function _calcProgress(currentIdx, totalKw) {
+        const idx = _num(currentIdx, 0);
+        const total = _num(totalKw, 1);
+        if (total <= 0) return 0;
+        return Math.min(Math.max(Math.round((idx / total) * 100), 0), 100);
+    }
 
-        // 每秒检查是否还有活跃任务，无则停轮询
-        function _checkShouldPoll() {
-            if (_activeTaskId === null && _pollTimer) {
-                clearPolling();
-            }
+    // ═══════════════════════════════════════════
+    // 预览扩展关键词
+    // ═══════════════════════════════════════════
+    async function previewKeywords() {
+        const keyword = document.getElementById('discoveryKeyword').value.trim();
+        const country = document.getElementById('discoveryCountry').value.trim();
+        if (!keyword) { showToast('请输入关键词', 'warning'); return; }
+        const btn = document.getElementById('btnPreview');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        document.getElementById('previewResult').textContent = '正在扩展...';
+        try {
+            let url = `/api/discovery/expand-keywords?keyword=${encodeURIComponent(keyword)}`;
+            if (country) url += `&country=${encodeURIComponent(country)}`;
+            const data = await _fetchWithTimeout(url);
+            const kws = _arr(data.expanded_keywords);
+            const langHint = data.country ? `（${_esc(data.country)}语言）` : '';
+            document.getElementById('previewResult').textContent =
+                kws.length > 0
+                    ? `扩展了 ${kws.length} 个关键词${langHint}: ${kws.join(', ')}`
+                    : '扩展失败，请重试';
+        } catch (err) {
+            document.getElementById('previewResult').textContent = '扩展失败: ' + err.message;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-magic me-1"></i>预览扩展关键词';
         }
+    }
 
-        // ──── 带超时的 fetch 封装 ────
-        async function _fetchWithTimeout(url, options = {}, timeout = 15000) {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), timeout);
-            try {
-                const resp = await fetch(url, { ...options, signal: controller.signal });
-                clearTimeout(timer);
-                return resp;
-            } catch (err) {
-                clearTimeout(timer);
-                if (err.name === 'AbortError') {
-                    throw new Error('请求超时');
-                }
-                throw err;
-            }
+    // ═══════════════════════════════════════════
+    // 开始搜索
+    // ═══════════════════════════════════════════
+    async function startSearch() {
+        const country = document.getElementById('discoveryCountry').value.trim();
+        const keyword = document.getElementById('discoveryKeyword').value.trim();
+        const depth = document.getElementById('discoveryDepth').value || 50;
+        if (!country || !keyword) { showToast('请输入国家和关键词', 'warning'); return; }
+
+        const btn = document.getElementById('btnStartSearch');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>启动中...';
+
+        try {
+            await _fetchWithTimeout(
+                `/api/discovery/search-task?country=${encodeURIComponent(country)}&keyword=${encodeURIComponent(keyword)}&depth=${depth}`,
+                { method: 'POST' }
+            );
+            await _refreshAll();
+            startPolling();
+            showToast('搜索任务已启动', 'success');
+        } catch (err) {
+            showToast('启动失败: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>开始搜索';
         }
+    }
 
-        // ──── 安全转义（防止 HTML 注入） ────
-        function _esc(str) {
-            if (str === null || str === undefined) return '';
-            const d = document.createElement('div');
-            d.textContent = String(str);
-            return d.innerHTML;
-        }
-
-        // ──── 安全的数字兜底 ────
-        function _num(val, fallback = 0) {
-            const n = Number(val);
-            return Number.isFinite(n) ? n : fallback;
-        }
-
-        // ──── 安全的数组兜底 ────
-        function _arr(val) {
-            return Array.isArray(val) ? val : [];
-        }
-
-        // ──── 安全的进度计算 ────
-        function _calcProgress(currentIdx, totalKw) {
-            const idx = _num(currentIdx, 0);
-            const total = _num(totalKw, 1);
-            if (total <= 0) return 0;
-            const p = Math.round((idx / total) * 100);
-            return Math.min(Math.max(p, 0), 100);
-        }
-
-        // ═══════════════════════════════════════════
-        // 预览扩展关键词
-        // ═══════════════════════════════════════════
-        async function previewKeywords() {
-            const keyword = document.getElementById('discoveryKeyword').value.trim();
-            const country = document.getElementById('discoveryCountry').value.trim();
-            if (!keyword) { alert('请输入关键词'); return; }
-            const btn = document.getElementById('btnPreview');
-            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-            document.getElementById('previewResult').textContent = '正在扩展...';
-            try {
-                let url = `/api/discovery/expand-keywords?keyword=${encodeURIComponent(keyword)}`;
-                if (country) url += `&country=${encodeURIComponent(country)}`;
-                const resp = await _fetchWithTimeout(url);
-                if (!resp.ok) throw new Error('服务器错误');
-                const data = await resp.json();
-                const kws = _arr(data.expanded_keywords);
-                const langHint = data.country ? `（${_esc(data.country)}语言）` : '';
-                document.getElementById('previewResult').textContent =
-                    kws.length > 0
-                        ? `扩展了 ${kws.length} 个关键词${langHint}: ${kws.join(', ')}`
-                        : '扩展失败，请重试';
-            } catch (err) {
-                document.getElementById('previewResult').textContent = '扩展失败: ' + err.message;
-            } finally {
-                btn.disabled = false; btn.innerHTML = '<i class="bi bi-magic"></i> 预览扩展关键词';
-            }
-        }
-
-        // ═══════════════════════════════════════════
-        // 开始搜索
-        // ═══════════════════════════════════════════
-        async function startSearch() {
-            const country = document.getElementById('discoveryCountry').value.trim();
-            const keyword = document.getElementById('discoveryKeyword').value.trim();
-            const depth = document.getElementById('discoveryDepth').value || 50;
-
-            if (!country || !keyword) { alert('请输入国家和关键词'); return; }
-
-            const btn = document.getElementById('btnStartSearch');
-            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 启动中...';
-
-            try {
-                const resp = await _fetchWithTimeout(
-                    `/api/discovery/search-task?country=${encodeURIComponent(country)}&keyword=${encodeURIComponent(keyword)}&depth=${depth}`,
-                    { method: 'POST' }
-                );
-                if (!resp.ok) {
-                    const errData = await resp.json().catch(() => ({}));
-                    throw new Error(errData.detail || '创建任务失败');
-                }
+    // ═══════════════════════════════════════════
+    // 停止搜索任务
+    // ═══════════════════════════════════════════
+    async function stopSearchTask() {
+        const btn = document.querySelector('#searchRunningBar .btn-outline-danger');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>停止中...'; }
+        try {
+            await _fetchWithTimeout('/api/stop-analysis', { method: 'POST' });
+            document.getElementById('searchStatusText').textContent = '正在停止...';
+            document.getElementById('searchProgressDetail').textContent = '正在等待当前任务完成';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i>停止中...'; }
+            setTimeout(async () => {
                 await _refreshAll();
-                startPolling();
-            } catch (err) {
-                alert('启动失败: ' + err.message);
-            } finally {
-                btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-fill"></i> Start Search';
-            }
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i>停止任务'; }
+            }, 3000);
+            showToast('已发送停止信号', 'info');
+        } catch (err) {
+            console.error('停止失败:', err);
+            showToast('发送停止信号失败: ' + err.message, 'danger');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i>停止任务'; }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // 更新搜索状态栏
+    // ═══════════════════════════════════════════
+    function updateSearchStatus(title, detail, progress, keywords, currentIdx) {
+        document.getElementById('searchStatusText').textContent = title;
+        document.getElementById('searchProgressDetail').textContent = detail;
+        const bar = document.getElementById('searchProgressBar');
+        const pct = Math.min(_num(progress), 100);
+        bar.style.width = pct + '%';
+        bar.textContent = pct + '%';
+        document.getElementById('searchRunningBar').classList.remove('d-none');
+
+        const container = document.getElementById('keywordListContainer');
+        const newKey = JSON.stringify({ kws: keywords, idx: currentIdx });
+        if (newKey === (container.dataset.lastKey || '')) return;
+        container.dataset.lastKey = newKey;
+
+        const kws = _arr(keywords);
+        if (kws.length === 0) {
+            container.innerHTML = '<span class="text-muted small">暂无关键词</span>';
+            return;
         }
 
-        // ═══════════════════════════════════════════
-        // 停止搜索任务
-        // ═══════════════════════════════════════════
-        async function stopSearchTask() {
-            const btn = document.querySelector('#searchRunningBar .btn-outline-danger');
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 停止中...'; }
-            try {
-                const resp = await _fetchWithTimeout('/api/stop-analysis', { method: 'POST' });
-                const data = await resp.json();
-                // 显示停止信号已发送的提示
-                document.getElementById('searchStatusText').textContent = '⏳ 正在停止...';
-                document.getElementById('searchProgressDetail').textContent = data.message || '正在等待当前任务完成';
-                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止中...'; }
-                // 3秒后自动刷新状态
-                setTimeout(async () => {
-                    await _refreshAll();
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止任务'; }
-                }, 3000);
-            } catch (err) {
-                console.error('停止失败:', err);
-                alert('发送停止信号失败: ' + err.message);
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止任务'; }
-            }
-        }
+        let html = '';
+        const idx = _num(currentIdx);
+        kws.forEach((kw, i) => {
+            let cls;
+            if (i < idx)       { cls = 'badge bg-success'; }
+            else if (i === idx) { cls = 'badge bg-warning text-dark'; }
+            else               { cls = 'badge bg-light text-muted border'; }
+            html += `<span class="${cls}" style="font-weight:400">${_esc(kw)}</span>`;
+        });
+        container.innerHTML = html;
+    }
 
-        // ═══════════════════════════════════════════
-        // 更新搜索状态栏（仅当 activeTask 变化时全量重建关键词列表）
-        // ═══════════════════════════════════════════
-        function updateSearchStatus(title, detail, progress, keywords, currentIdx) {
-            // 文本节点直接更新
-            document.getElementById('searchStatusText').textContent = title;
-            document.getElementById('searchProgressDetail').textContent = detail;
-            const bar = document.getElementById('searchProgressBar');
-            const pct = Math.min(_num(progress), 100);
-            bar.style.width = pct + '%';
-            bar.textContent = pct + '%';
-            document.getElementById('searchRunningBar').classList.remove('d-none');
+    function hideSearchStatus() {
+        document.getElementById('searchRunningBar').classList.add('d-none');
+    }
 
-            // 关键词列表：只在 activeTask 变化时重建
-            const container = document.getElementById('keywordListContainer');
-            const newKey = JSON.stringify({ kws: keywords, idx: currentIdx });
-            if (newKey === container.dataset.lastKey) return;   // 无变化，跳过
+    // ═══════════════════════════════════════════
+    // 轮询回调
+    // ═══════════════════════════════════════════
+    async function _pollTick() {
+        try {
+            const data = await _fetchWithTimeout('/api/discovery/tasks');
+            _activeTaskId = data.active_task_id ?? null;
+            _renderTaskTable(data);
 
-            container.dataset.lastKey = newKey;
+            const activeTask = _activeTaskId
+                ? (data.tasks || []).find(t => t.id === _activeTaskId)
+                : null;
 
-            const kws = _arr(keywords);
-            if (kws.length === 0) {
-                container.innerHTML = '<span class="text-muted small">暂无关键词</span>';
-                return;
+            if (activeTask) {
+                const kws = _arr(activeTask.expanded_keywords);
+                const totalKw = kws.length || 1;
+                const currentIdx = _num(activeTask.current_keyword_index);
+                const progress = activeTask.status === 'Pending' ? 0 : _calcProgress(currentIdx, totalKw);
+                const currentKw = kws[currentIdx] || activeTask.keyword;
+
+                updateSearchStatus(
+                    `任务 #${activeTask.id}: ${_esc(activeTask.country)} / ${_esc(activeTask.keyword)}`,
+                    `正在处理第 ${Math.min(currentIdx + 1, totalKw)}/${totalKw} 个关键词: 「${_esc(currentKw)}」 | 发现 ${_num(activeTask.found_websites)} 个网站, 新增 ${_num(activeTask.new_companies)} 个公司`,
+                    progress, kws, currentIdx
+                );
+            } else {
+                hideSearchStatus();
+                _checkShouldPoll();
             }
 
-            let html = '';
-            const idx = _num(currentIdx);
-            kws.forEach((kw, i) => {
-                let cls, icon;
-                if (i < idx)       { cls = 'bg-success';       icon = '✅ '; }
-                else if (i === idx) { cls = 'bg-warning text-dark'; icon = '⏳ '; }
-                else               { cls = 'bg-light text-muted border'; icon = '⏸️ '; }
-                html += `<span class="badge ${cls}" style="font-weight:400">${icon}${_esc(kw)}</span>`;
-            });
-            container.innerHTML = html;
+            if ((_pollTick._counter || 0) % 6 === 0) loadDiscovered();
+            _pollTick._counter = (_pollTick._counter || 0) + 1;
+        } catch (err) {
+            console.error('轮询异常:', err);
+        }
+    }
+    _pollTick._counter = 0;
+
+    // ═══════════════════════════════════════════
+    // 渲染任务表格
+    // ═══════════════════════════════════════════
+    function _renderTaskTable(data) {
+        const tbody = document.getElementById('taskTableBody');
+        const tasks = data.tasks || [];
+        if (tasks.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10"><div class="table-empty-state" style="padding:1.5rem"><i class="bi bi-inbox"></i>暂无搜索任务</div></td></tr>';
+            return;
         }
 
-        function hideSearchStatus() {
-            document.getElementById('searchRunningBar').classList.add('d-none');
-        }
+        let html = '';
+        tasks.forEach(t => {
+            const kws = _arr(t.expanded_keywords);
+            const totalKw = kws.length || 1;
+            const progress = t.status === 'Completed' ? 100
+                : t.status === 'Pending' ? 0
+                : _calcProgress(_num(t.current_keyword_index), totalKw);
 
-        // ═══════════════════════════════════════════
-        // 统一的轮询回调（单点更新）
-        // ═══════════════════════════════════════════
-        async function _pollTick() {
-            try {
-                const resp = await _fetchWithTimeout('/api/discovery/tasks');
-                if (!resp.ok) return;
-                const data = await resp.json();
-
-                // 更新活跃任务ID
-                _activeTaskId = data.active_task_id ?? null;
-
-                // 更新任务表格
-                _renderTaskTable(data);
-
-                // 更新状态栏
-                const activeTask = _activeTaskId
-                    ? (data.tasks || []).find(t => t.id === _activeTaskId)
-                    : null;
-
-                if (activeTask) {
-                    const kws = _arr(activeTask.expanded_keywords);
-                    const totalKw = kws.length || 1;
-                    const currentIdx = _num(activeTask.current_keyword_index);
-                    const progress = activeTask.status === 'Pending' ? 0 : _calcProgress(currentIdx, totalKw);
-                    const currentKw = kws[currentIdx] || activeTask.keyword;
-
-                    updateSearchStatus(
-                        `任务 #${activeTask.id}: ${_esc(activeTask.country)} / ${_esc(activeTask.keyword)}`,
-                        `正在处理第 ${Math.min(currentIdx + 1, totalKw)}/${totalKw} 个关键词: 「${_esc(currentKw)}」 | 发现 ${_num(activeTask.found_websites)} 个网站, 新增 ${_num(activeTask.new_companies)} 个公司`,
-                        progress,
-                        kws,
-                        currentIdx
-                    );
-                } else {
-                    hideSearchStatus();
-                    _checkShouldPoll();
-                }
-
-                // 每 6 次轮询（~18秒）刷新一次发现结果
-                if ((_pollTick._counter || 0) % 6 === 0) {
-                    loadDiscovered();
-                }
-                _pollTick._counter = (_pollTick._counter || 0) + 1;
-
-            } catch (err) {
-                console.error('轮询异常:', err);
-            }
-        }
-        _pollTick._counter = 0;
-
-        // ═══════════════════════════════════════════
-        // 渲染任务表格（增量更新 future 可改为只更新变化行）
-        // ═══════════════════════════════════════════
-        function _renderTaskTable(data) {
-            const tbody = document.getElementById('taskTableBody');
-            const tasks = data.tasks || [];
-
-            if (tasks.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">暂无搜索任务</td></tr>';
-                return;
+            let keywordLabel = _esc(t.keyword);
+            if (t.status === 'Running' && kws.length > 0) {
+                const idx = Math.min(_num(t.current_keyword_index), kws.length - 1);
+                if (idx >= 0) keywordLabel += ` → ${_esc(kws[idx])}`;
             }
 
-            const statusBadge = {
-                'Pending': 'bg-secondary', 'Running': 'bg-warning text-dark',
-                'Completed': 'bg-success', 'Failed': 'bg-danger', 'Paused': 'bg-info text-dark'
+            const taskStatusCls = {
+                'Pending': 'badge-status pending', 'Running': 'badge-status running',
+                'Completed': 'badge-status completed', 'Failed': 'badge-status error',
+                'Paused': 'badge-status stopped'
             };
 
-            let html = '';
-            tasks.forEach(t => {
-                const kws = _arr(t.expanded_keywords);
-                const totalKw = kws.length || 1;
-                const progress = t.status === 'Completed' ? 100
-                    : t.status === 'Pending' ? 0
-                    : _calcProgress(_num(t.current_keyword_index), totalKw);
-
-                let keywordLabel = _esc(t.keyword);
-                if (t.status === 'Running' && kws.length > 0) {
-                    const idx = Math.min(_num(t.current_keyword_index), kws.length - 1);
-                    if (idx >= 0) keywordLabel += ` → ${_esc(kws[idx])}`;
-                }
-
-                const now = t.created_at ? new Date(t.created_at).toLocaleString() : '-';
-
-                html += `<tr>
-                    <td>#${t.id}</td>
-                    <td>${_esc(t.country)}</td>
-                    <td class="small">${keywordLabel}</td>
-                    <td>${kws.length || '-'}</td>
-                    <td><span class="badge ${statusBadge[t.status] || 'bg-secondary'}">${_esc(t.status)}</span></td>
-                    <td>${_num(t.found_websites)}</td>
-                    <td><strong>${_num(t.new_companies)}</strong></td>
-                    <td>
-                        <div class="progress" style="height:6px">
+            html += `<tr>
+                <td>#${t.id}</td>
+                <td>${_esc(t.country)}</td>
+                <td class="small">${keywordLabel}</td>
+                <td>${kws.length || '-'}</td>
+                <td><span class="badge-status ${taskStatusCls[t.status] || 'bg-secondary'}">${_esc(t.status)}</span></td>
+                <td>${_num(t.found_websites)}</td>
+                <td class="fw-bold">${_num(t.new_companies)}</td>
+                <td style="min-width:100px">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height:6px">
                             <div class="progress-bar ${t.status === 'Completed' ? 'bg-success' : t.status === 'Failed' ? 'bg-danger' : 'bg-warning'}" style="width:${progress}%"></div>
                         </div>
-                        <small class="text-muted">${progress}%</small>
-                    </td>
-                    <td class="small">${now}</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-secondary" onclick='showTaskLog(${t.id})' title="查看执行日志"><i class="bi bi-journal-text"></i></button>
-                        ${t.status === 'Paused' ? `<button class="btn btn-sm btn-outline-success ms-1" onclick='resumeTask(${t.id})'><i class="bi bi-play-fill"></i> 恢复</button>` : ''}
-                        ${t.status === 'Completed' || t.status === 'Failed' ? `<button class="btn btn-sm btn-outline-danger ms-1" onclick='deleteTask(${t.id})'><i class="bi bi-trash"></i></button>` : ''}
-                    </td>
+                        <small class="text-muted" style="font-size:0.75rem">${progress}%</small>
+                    </div>
+                </td>
+                <td class="small">${_fmtDate(t.created_at)}</td>
+                <td>
+                    <button class="btn btn-icon btn-outline-secondary" onclick="showTaskLog(${t.id})" title="查看日志"><i class="bi bi-journal-text"></i></button>
+                    ${t.status === 'Paused' ? `<button class="btn btn-icon btn-outline-success ms-1" onclick="resumeTask(${t.id})" title="恢复"><i class="bi bi-play-fill"></i></button>` : ''}
+                    ${t.status === 'Completed' || t.status === 'Failed' ? `<button class="btn btn-icon btn-outline-danger ms-1" onclick="deleteTask(${t.id})" title="删除"><i class="bi bi-trash"></i></button>` : ''}
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+
+    async function loadTasks() {
+        try {
+            const data = await _fetchWithTimeout('/api/discovery/tasks');
+            _activeTaskId = data.active_task_id ?? null;
+            _renderTaskTable(data);
+        } catch (err) { console.error('加载任务失败:', err); }
+    }
+
+    // ═══════════════════════════════════════════
+    // 恢复 / 删除
+    // ═══════════════════════════════════════════
+    async function resumeTask(id) {
+        try {
+            await _fetchWithTimeout(`/api/discovery/tasks/${id}/resume`, { method: 'POST' });
+            await _refreshAll();
+            startPolling();
+            showToast('任务已恢复', 'success');
+        } catch (err) {
+            showToast('恢复失败: ' + err.message, 'danger');
+        }
+    }
+
+    async function deleteTask(id) {
+        if (!confirm('确定删除该任务？')) return;
+        try {
+            await _fetchWithTimeout(`/api/discovery/tasks/${id}`, { method: 'DELETE' });
+            await _refreshAll();
+            showToast('已删除', 'success');
+        } catch (err) {
+            showToast('删除失败: ' + err.message, 'danger');
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // 发现结果列表（分页）
+    // ═══════════════════════════════════════════
+    let _discPage = 1;
+    let _discTotalPages = 1;
+
+    async function loadDiscovered(resetPage) {
+        if (resetPage) _discPage = 1;
+        const search = document.getElementById('discSearch').value;
+        const country = document.getElementById('discCountry').value;
+        const priority = document.getElementById('discPriority').value;
+        const keyword = document.getElementById('discKeyword').value;
+
+        let url = `/api/discovery/discovered-customers?sort_by_score=desc&page=${_discPage}&page_size=50`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (country) url += `&country=${encodeURIComponent(country)}`;
+        if (priority) url += `&priority=${encodeURIComponent(priority)}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+
+        try {
+            const data = await _fetchWithTimeout(url);
+            document.getElementById('discoveredCount').textContent = `${_num(data.total)} 个`;
+
+            _discTotalPages = data.total_pages || 1;
+            _renderDiscPagination();
+
+            _updateSelectOptions('discCountry', data.countries || []);
+            _updateSelectOptions('discKeyword', data.keywords || []);
+
+            const tbody = document.getElementById('discoveredTableBody');
+            const customers = data.customers || [];
+            if (customers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="table-empty-state" style="padding:1.5rem"><i class="bi bi-inbox"></i>暂无发现结果</div></td></tr>';
+                return;
+            }
+
+            let html = '';
+            customers.forEach(c => {
+                const score = _num(c.total_score);
+                const g = _gradeLabel(score);
+                html += `<tr>
+                    <td><a href="/customer/${c.id}" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
+                    <td><span class="badge bg-light text-dark border">${_esc(c.country) || '-'}</span></td>
+                    <td class="small text-muted">${_esc(c.website) || '-'}</td>
+                    <td><span class="badge bg-secondary rounded-pill">${_num(c.email_count)}</span></td>
+                    <td class="small text-muted">${_esc(c.discovery_keyword) || '-'}</td>
+                    <td class="fw-bold ${g.cls}">${score !== 0 || c.total_score !== null ? score : '-'}</td>
+                    <td><span class="badge rounded-pill ${g.cls === 'grade-A' ? 'bg-danger' : g.cls === 'grade-B' ? 'bg-warning text-dark' : g.cls === 'grade-C' ? 'bg-info text-dark' : 'bg-secondary'}">${_esc(c.priority) || '-'}</span></td>
+                    <td><a href="/customer/${c.id}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>详情</a></td>
                 </tr>`;
             });
             tbody.innerHTML = html;
-        }
+        } catch (err) { console.error('加载发现结果失败:', err); }
+    }
 
-        // ──── loadTasks（手动刷新时调用） ────
-        async function loadTasks() {
-            try {
-                const resp = await _fetchWithTimeout('/api/discovery/tasks');
-                if (!resp.ok) return;
-                const data = await resp.json();
-                _activeTaskId = data.active_task_id ?? null;
-                _renderTaskTable(data);
-            } catch (err) {
-                console.error('加载任务失败:', err);
-            }
-        }
+    function _renderDiscPagination() {
+        const nav = document.getElementById('discPagination');
+        if (_discTotalPages <= 1) { nav.style.display = 'none'; return; }
+        nav.style.display = 'block';
+        document.getElementById('discPageInfo').textContent = `${_discPage}/${_discTotalPages}`;
+        document.getElementById('discPrevPage').className = `page-item${_discPage <= 1 ? ' disabled' : ''}`;
+        document.getElementById('discNextPage').className = `page-item${_discPage >= _discTotalPages ? ' disabled' : ''}`;
+    }
 
-        // ═══════════════════════════════════════════
-        // 恢复 / 删除任务
-        // ═══════════════════════════════════════════
-        async function resumeTask(id) {
-            try {
-                const resp = await _fetchWithTimeout(`/api/discovery/tasks/${id}/resume`, { method: 'POST' });
-                if (!resp.ok) {
-                    const errData = await resp.json().catch(() => ({}));
-                    throw new Error(errData.detail || '恢复失败');
-                }
-                await _refreshAll();
-                startPolling();
-            } catch (err) {
-                alert('恢复失败: ' + err.message);
-            }
-        }
+    function changeDiscPage(delta) {
+        const newPage = _discPage + delta;
+        if (newPage < 1 || newPage > _discTotalPages) return;
+        _discPage = newPage;
+        loadDiscovered(false);
+    }
 
-        async function deleteTask(id) {
-            if (!confirm('确定删除该任务？')) return;
-            try {
-                const resp = await _fetchWithTimeout(`/api/discovery/tasks/${id}`, { method: 'DELETE' });
-                if (!resp.ok) throw new Error('删除失败');
-                await _refreshAll();
-            } catch (err) {
-                alert('删除失败: ' + err.message);
-            }
-        }
+    function _updateSelectOptions(selectId, newOptions) {
+        const sel = document.getElementById(selectId);
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">' + (selectId === 'discCountry' ? '所有国家' : '所有关键词') + '</option>';
+        (newOptions || []).forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt;
+            if (opt === currentVal) o.selected = true;
+            sel.appendChild(o);
+        });
+    }
 
-        // ═══════════════════════════════════════════
-        // 发现结果列表（支持分页）
-        // ═══════════════════════════════════════════
-        let _discPage = 1;
-        let _discTotalPages = 1;
+    // ═══════════════════════════════════════════
+    // 相似客户扩展
+    // ═══════════════════════════════════════════
+    async function findSimilarCompanies() {
+        const url = document.getElementById('seedUrl').value.trim();
+        const country = document.getElementById('seedCountry').value.trim();
+        if (!url || !country) { showToast('请输入目标公司网址和目标国家', 'warning'); return; }
 
-        async function loadDiscovered(resetPage) {
-            if (resetPage) _discPage = 1;
-            const search = document.getElementById('discSearch').value;
-            const country = document.getElementById('discCountry').value;
-            const priority = document.getElementById('discPriority').value;
-            const keyword = document.getElementById('discKeyword').value;
+        const btn = document.getElementById('btnFindSimilar');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>分析中...';
+        document.getElementById('similarProgress').classList.remove('d-none');
+        document.getElementById('similarResultCard').classList.add('d-none');
 
-            let url = `/api/discovery/discovered-customers?sort_by_score=desc&page=${_discPage}&page_size=50`;
-            if (search) url += `&search=${encodeURIComponent(search)}`;
-            if (country) url += `&country=${encodeURIComponent(country)}`;
-            if (priority) url += `&priority=${encodeURIComponent(priority)}`;
-            if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        try {
+            const data = await _fetchWithTimeout(
+                `/api/discovery/similar-companies?company_url=${encodeURIComponent(url)}&target_country=${encodeURIComponent(country)}&top_n=50`,
+                { method: 'POST' }, 120000
+            );
 
-            try {
-                const resp = await _fetchWithTimeout(url);
-                if (!resp.ok) return;
-                const data = await resp.json();
+            const seed = data.seed_company || {};
+            document.getElementById('seedName').textContent = seed.name || url;
+            document.getElementById('seedIndustry').textContent = seed.industry || seed.industry_category || '未知';
+            document.getElementById('seedKeywords').textContent = (seed.keywords || []).slice(0, 5).join(', ') || '无';
 
-                document.getElementById('discoveredCount').textContent = `${_num(data.total)} 个`;
+            const companies = data.similar_companies || [];
+            document.getElementById('similarCount').textContent = `${companies.length} 个`;
+            const tbody = document.getElementById('similarTableBody');
 
-                // 更新分页
-                _discTotalPages = data.total_pages || 1;
-                _renderDiscPagination();
-
-                // 更新筛选下拉（保留用户当前选择）
-                _updateSelectOptions('discCountry', data.countries || []);
-                _updateSelectOptions('discKeyword', data.keywords || []);
-
-                const tbody = document.getElementById('discoveredTableBody');
-                const customers = data.customers || [];
-                if (customers.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无发现结果</td></tr>';
-                    return;
-                }
-
-                const pBadge = { 'A': 'bg-danger', 'B': 'bg-warning text-dark', 'C': 'bg-info text-dark', 'D': 'bg-secondary' };
+            if (companies.length === 0) {
+                const errMsg = data.error ? ` (${data.error})` : '';
+                tbody.innerHTML = `<tr><td colspan="5"><div class="table-empty-state" style="padding:1.5rem"><i class="bi bi-search"></i>未找到相似客户${_esc(errMsg)}</div></td></tr>`;
+            } else {
                 let html = '';
-                customers.forEach(c => {
-                    const score = _num(c.total_score);
-                    const sc = score >= 80 ? 'text-danger' : score >= 60 ? 'text-warning' : score >= 40 ? 'text-info' : 'text-muted';
+                companies.forEach((c, i) => {
+                    const sc = c.similarity_score || 0;
+                    const barColor = sc >= 70 ? 'bg-success' : sc >= 50 ? 'bg-warning' : 'bg-secondary';
                     html += `<tr>
-                        <td><a href="/customer/${c.id}" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
-                        <td><span class="badge bg-light text-dark">${_esc(c.country) || '-'}</span></td>
-                        <td class="small">${_esc(c.website) || '-'}</td>
-                        <td><span class="badge bg-secondary">${_num(c.email_count)}</span></td>
-                        <td class="small text-muted">${_esc(c.discovery_keyword) || '-'}</td>
-                        <td class="${sc} fw-bold">${score !== 0 || c.total_score !== null ? score : '-'}</td>
-                        <td><span class="badge ${pBadge[c.priority] || 'bg-secondary'}">${_esc(c.priority) || '-'}</span></td>
-                        <td><a href="/customer/${c.id}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> 详情</a></td>
+                        <td>${i + 1}</td>
+                        <td class="small">${_esc(c.name || c.website || '-')}</td>
+                        <td class="small"><a href="https://${_esc(c.website)}" target="_blank" class="text-decoration-none">${_esc(c.website) || '-'}</a></td>
+                        <td>${_esc(c.country) || '-'}</td>
+                        <td style="min-width:120px">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:6px">
+                                    <div class="progress-bar ${barColor}" style="width:${sc}%"></div>
+                                </div>
+                                <small class="fw-bold">${sc}</small>
+                            </div>
+                        </td>
                     </tr>`;
                 });
                 tbody.innerHTML = html;
-
-            } catch (err) {
-                console.error('加载发现结果失败:', err);
             }
+            document.getElementById('similarResultCard').classList.remove('d-none');
+            showToast(`找到 ${companies.length} 个相似客户`, 'success');
+        } catch (err) {
+            document.getElementById('similarTableBody').innerHTML =
+                `<tr><td colspan="5"><div class="table-empty-state" style="padding:1.5rem;color:var(--color-rose-500)"><i class="bi bi-exclamation-triangle"></i>请求失败: ${_esc(err.message)}</div></td></tr>`;
+            document.getElementById('similarResultCard').classList.remove('d-none');
+            showToast('请求失败: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-diagram-3 me-1"></i>查找相似客户';
+            document.getElementById('similarProgress').classList.add('d-none');
         }
+    }
 
-        // ──── 分页控件渲染 ────
-        function _renderDiscPagination() {
-            const nav = document.getElementById('discPagination');
-            if (_discTotalPages <= 1) { nav.style.display = 'none'; return; }
-            nav.style.display = 'block';
-            document.getElementById('discPageInfo').textContent = `${_discPage}/${_discTotalPages}`;
-            document.getElementById('discPrevPage').className = `page-item${_discPage <= 1 ? ' disabled' : ''}`;
-            document.getElementById('discNextPage').className = `page-item${_discPage >= _discTotalPages ? ' disabled' : ''}`;
-        }
+    // ═══════════════════════════════════════════
+    // 统一刷新
+    // ═══════════════════════════════════════════
+    async function _refreshAll() {
+        await Promise.all([loadTasks(), loadDiscovered()]);
+    }
 
-        function changeDiscPage(delta) {
-            const newPage = _discPage + delta;
-            if (newPage < 1 || newPage > _discTotalPages) return;
-            _discPage = newPage;
-            loadDiscovered(false);
-        }
+    // ═══════════════════════════════════════════
+    // 查看任务日志
+    // ═══════════════════════════════════════════
+    async function showTaskLog(taskId) {
+        document.getElementById('taskLogTitle').textContent = `#${taskId}`;
+        document.getElementById('taskLogBody').innerHTML = '<p class="text-muted">加载中...</p>';
+        const modal = new bootstrap.Modal(document.getElementById('taskLogModal'));
+        modal.show();
 
-        // ──── 更新下拉框选项（保留用户选择） ────
-        function _updateSelectOptions(selectId, newOptions) {
-            const sel = document.getElementById(selectId);
-            const currentVal = sel.value;
-            sel.innerHTML = '<option value="">' + (selectId === 'discCountry' ? '所有国家' : '所有关键词') + '</option>';
-            (newOptions || []).forEach(opt => {
-                const o = document.createElement('option');
-                o.value = opt;
-                o.textContent = opt;
-                if (opt === currentVal) o.selected = true;
-                sel.appendChild(o);
+        try {
+            const data = await _fetchWithTimeout('/api/discovery/tasks');
+            const task = (data.tasks || []).find(t => t.id === taskId);
+            if (!task) {
+                document.getElementById('taskLogBody').innerHTML = '<p class="text-muted">任务不存在</p>';
+                return;
+            }
+
+            let logs = [];
+            if (task.task_log) {
+                try { logs = JSON.parse(task.task_log); } catch(e) { logs = []; }
+            }
+
+            if (logs.length === 0) {
+                document.getElementById('taskLogBody').innerHTML = '<p class="text-muted">暂无日志记录</p>';
+                return;
+            }
+
+            let html = '<table class="table table-sm table-borderless mb-0">';
+            logs.forEach(log => {
+                const icon = log.type === 'info' ? 'ℹ️' : log.type === 'success' ? '✅' : log.type === 'warning' ? '⚠️' : '❌';
+                html += `<tr>
+                    <td class="text-muted" style="width:70px;white-space:nowrap;font-size:0.8rem">${_esc(log.time || '')}</td>
+                    <td style="width:30px">${icon}</td>
+                    <td style="font-size:0.85rem">${_esc(log.msg || '')}</td>
+                </tr>`;
             });
+            html += '</table>';
+            document.getElementById('taskLogBody').innerHTML = html;
+        } catch (err) {
+            document.getElementById('taskLogBody').innerHTML = `<p class="text-danger">加载失败: ${_esc(err.message)}</p>`;
         }
+    }
 
-        // ═══════════════════════════════════════════
-        // 相似客户扩展（V2.5）
-        // ═══════════════════════════════════════════
-        async function findSimilarCompanies() {
-            const url = document.getElementById('seedUrl').value.trim();
-            const country = document.getElementById('seedCountry').value.trim();
-            if (!url || !country) { alert('请输入目标公司网址和目标国家'); return; }
-
-            const btn = document.getElementById('btnFindSimilar');
-            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 分析中...';
-            document.getElementById('similarProgress').classList.remove('d-none');
-            document.getElementById('similarResultCard').classList.add('d-none');
-
-            try {
-                const resp = await _fetchWithTimeout(
-                    `/api/discovery/similar-companies?company_url=${encodeURIComponent(url)}&target_country=${encodeURIComponent(country)}&top_n=50`,
-                    { method: 'POST' },
-                    120000
-                );
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '请求失败');
-
-                // 显示种子公司信息
-                const seed = data.seed_company || {};
-                document.getElementById('seedName').textContent = seed.name || url;
-                document.getElementById('seedIndustry').textContent = seed.industry || seed.industry_category || '未知';
-                document.getElementById('seedKeywords').textContent = (seed.keywords || []).slice(0, 5).join(', ') || '无';
-
-                // 渲染相似客户列表
-                const companies = data.similar_companies || [];
-                document.getElementById('similarCount').textContent = `${companies.length} 个`;
-                const tbody = document.getElementById('similarTableBody');
-
-                if (companies.length === 0) {
-                    const errMsg = data.error ? ` (${data.error})` : '';
-                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">未找到相似客户${errMsg}</td></tr>`;
-                } else {
-                    let html = '';
-                    companies.forEach((c, i) => {
-                        const sc = c.similarity_score || 0;
-                        const barColor = sc >= 70 ? 'bg-success' : sc >= 50 ? 'bg-warning' : 'bg-secondary';
-                        html += `<tr>
-                            <td>${i + 1}</td>
-                            <td class="small">${_esc(c.name || c.website || '-')}</td>
-                            <td class="small"><a href="https://${c.website}" target="_blank">${_esc(c.website) || '-'}</a></td>
-                            <td>${_esc(c.country) || '-'}</td>
-                            <td style="min-width:120px">
-                                <div class="d-flex align-items-center">
-                                    <div class="progress flex-grow-1" style="height:6px">
-                                        <div class="progress-bar ${barColor}" style="width:${sc}%"></div>
-                                    </div>
-                                    <small class="ms-2 fw-bold">${sc}</small>
-                                </div>
-                            </td>
-                        </tr>`;
-                    });
-                    tbody.innerHTML = html;
-                }
-
-                document.getElementById('similarResultCard').classList.remove('d-none');
-
-            } catch (err) {
-                document.getElementById('similarTableBody').innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">请求失败: ${_esc(err.message)}</td></tr>`;
-                document.getElementById('similarResultCard').classList.remove('d-none');
-            } finally {
-                btn.disabled = false; btn.innerHTML = '<i class="bi bi-diagram-3"></i> 查找相似客户';
-                document.getElementById('similarProgress').classList.add('d-none');
-            }
-        }
-
-        // ═══════════════════════════════════════════
-        // 统一刷新（任务+发现）
-        // ═══════════════════════════════════════════
-        async function _refreshAll() {
-            await Promise.all([loadTasks(), loadDiscovered()]);
-        }
-
-        // ═══════════════════════════════════════════
-        // 查看任务日志
-        // ═══════════════════════════════════════════
-        async function showTaskLog(taskId) {
-            document.getElementById('taskLogTitle').textContent = `#${taskId}`;
-            document.getElementById('taskLogBody').innerHTML = '<p class="text-muted">加载中...</p>';
-            const modal = new bootstrap.Modal(document.getElementById('taskLogModal'));
-            modal.show();
-
-            try {
-                const resp = await _fetchWithTimeout('/api/discovery/tasks');
-                const data = await resp.json();
-                const task = (data.tasks || []).find(t => t.id === taskId);
-                if (!task) {
-                    document.getElementById('taskLogBody').innerHTML = '<p class="text-danger">任务不存在</p>';
-                    return;
-                }
-
-                let logs = [];
-                if (task.task_log) {
-                    try { logs = JSON.parse(task.task_log); } catch(e) { logs = []; }
-                }
-
-                if (logs.length === 0) {
-                    document.getElementById('taskLogBody').innerHTML = '<p class="text-muted">暂无日志记录</p>';
-                    return;
-                }
-
-                const typeIcon = {
-                    'info': '<span class="text-info">ℹ️</span>',
-                    'success': '<span class="text-success">✅</span>',
-                    'warning': '<span class="text-warning">⚠️</span>',
-                    'error': '<span class="text-danger">❌</span>',
-                };
-
-                let html = '<table class="table table-sm table-borderless mb-0">';
-                logs.forEach(log => {
-                    const icon = typeIcon[log.type] || '<span class="text-muted">•</span>';
-                    html += `<tr>
-                        <td class="text-muted" style="width:60px;white-space:nowrap">${_esc(log.time || '')}</td>
-                        <td style="width:30px">${icon}</td>
-                        <td>${_esc(log.msg || '')}</td>
-                    </tr>`;
-                });
-                html += '</table>';
-                document.getElementById('taskLogBody').innerHTML = html;
-
-            } catch (err) {
-                document.getElementById('taskLogBody').innerHTML = `<p class="text-danger">加载失败: ${_esc(err.message)}</p>`;
-            }
-        }
-
-        // ═══════════════════════════════════════════
-        // 页面初始化
-        // ═══════════════════════════════════════════
-        document.addEventListener('DOMContentLoaded', () => {
-            _refreshAll();
-            startPolling();
-        });
-    </script>
-
-</body>
-</html>
+    // ═══════════════════════════════════════════
+    // 初始化
+    // ═══════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', () => {
+        _refreshAll();
+        startPolling();
+    });
+</script>
+{% endblock %}

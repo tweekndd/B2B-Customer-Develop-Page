@@ -5,11 +5,12 @@ AI Trade Customer Analyzer V2.9 - 主程序入口
 import os
 from contextlib import asynccontextmanager
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.templating import Jinja2Templates
 from app.database import init_db
-from app.api import router  # V2.8: 从拆分后的 api 包导入
+from app.api import router
 
 
 @asynccontextmanager
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
+templates = Jinja2Templates(directory="app/templates")
+
 app = FastAPI(
     title="AI Trade Customer Analyzer V2.9",
     description="客户发现 + 客户分析 + 客户数据库平台",
@@ -40,23 +43,23 @@ app.include_router(router)
 
 
 @app.get("/")
-async def index_page():
-    return FileResponse("app/templates/index.html")
+async def index_page(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request, "active_nav": "index"})
 
 
 @app.get("/discovery")
-async def discovery_page():
-    return FileResponse("app/templates/discovery.html")
+async def discovery_page(request: Request):
+    return templates.TemplateResponse("discovery.html", {"request": request, "active_nav": "discovery"})
 
 
 @app.get("/customer/{customer_id}")
-async def detail_page(customer_id: int):
-    return FileResponse("app/templates/detail.html")
+async def detail_page(request: Request, customer_id: int):
+    return templates.TemplateResponse("detail.html", {"request": request, "active_nav": "detail"})
 
 
 @app.get("/config")
-async def config_page():
-    return FileResponse("app/templates/config.html")
+async def config_page(request: Request):
+    return templates.TemplateResponse("config.html", {"request": request, "active_nav": "config"})
 
 
 if __name__ == "__main__":

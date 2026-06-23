@@ -1,456 +1,426 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trade Customer Analyzer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css" rel="stylesheet">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}客户列表 - AI Trade Customer Analyzer{% endblock %}
 
-    <nav class="navbar navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand d-flex align-items-center" href="/">
-                <i class="bi bi-robot me-2"></i>
-                <span class="fw-bold">AI Trade Customer Analyzer V2.9</span>
+{% block nav_stats %}
+<span class="nav-stats-badge" id="statsBadge">
+    <i class="bi bi-database"></i> <span id="navStatsText">加载中...</span>
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4" id="statsCards">
+    <div class="col-md-3 col-6" data-animate data-delay="100">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-buildings me-1"></i>全部客户</div>
+                <div class="stats-number" id="statTotal">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6" data-animate data-delay="200">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-check-circle me-1"></i>已分析</div>
+                <div class="stats-number" id="statAnalyzed">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6" data-animate data-delay="300">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-google me-1"></i>Google 发现</div>
+                <div class="stats-number" id="statGoogle">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6" data-animate data-delay="400">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-trophy me-1"></i>A 级客户</div>
+                <div class="stats-number" id="statGradeA">—</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作栏 -->
+<div class="card border-0 mb-4" data-animate>
+    <div class="card-body">
+        <div class="action-bar">
+            <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-upload me-1"></i>导入 Excel
+            </button>
+            <button class="btn btn-primary" onclick="analyzeAll()" id="btnAnalyzeAll">
+                <i class="bi bi-lightning-fill me-1"></i>批量分析
+            </button>
+            <button class="btn btn-outline-danger" onclick="stopAnalysis()" id="btnStop">
+                <i class="bi bi-stop-circle me-1"></i>停止分析
+            </button>
+            <div class="divider"></div>
+            <a href="/api/export-excel" class="btn btn-outline-primary">
+                <i class="bi bi-download me-1"></i>导出 Excel
             </a>
-            <div class="d-flex align-items-center">
-                <a href="/" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-people"></i> 客户列表</a>
-                <a href="/discovery" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-search"></i> 客户发现</a>
-                <a href="/config" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-gear"></i> 评分配置</a>
-                <span class="badge bg-light text-primary" id="statsBadge">
-                    <i class="bi bi-database"></i> 加载中...
-                </span>
-            </div>
+            <button class="btn btn-outline-primary" onclick="refreshData()">
+                <i class="bi bi-arrow-clockwise me-1"></i>刷新
+            </button>
         </div>
-    </nav>
+    </div>
+</div>
 
-    <div class="container-fluid mt-4">
+<!-- 分析状态提示 -->
+<div id="analysisStatusBar" class="d-none alert alert-warning alert-banner d-flex justify-content-between align-items-center mb-3" data-animate>
+    <span>
+        <i class="bi bi-hourglass-split me-2"></i>
+        <span id="analysisStatusText">正在分析中...</span>
+    </span>
+    <button class="btn btn-sm btn-outline-danger" onclick="stopAnalysis()">
+        <i class="bi bi-stop-circle me-1"></i>停止
+    </button>
+</div>
 
-        <!-- 统计数据 -->
-        <div class="row mb-4" id="statsCards">
-            <div class="col-md-3 col-6 mb-3">
-                <div class="card border-0 shadow-sm stats-card">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-muted">全部客户</h5>
-                        <h2 class="mb-0 text-primary" id="statTotal">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 col-6 mb-3">
-                <div class="card border-0 shadow-sm stats-card">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-muted">已分析</h5>
-                        <h2 class="mb-0 text-success" id="statAnalyzed">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 col-6 mb-3">
-                <div class="card border-0 shadow-sm stats-card">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-muted">Google发现</h5>
-                        <h2 class="mb-0 text-info" id="statGoogle">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 col-6 mb-3">
-                <div class="card border-0 shadow-sm stats-card">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-muted">A级客户</h5>
-                        <h2 class="mb-0 text-danger" id="statGradeA">0</h2>
-                    </div>
-                </div>
-            </div>
+<!-- 筛选栏 -->
+<div class="filter-bar" data-animate>
+    <input type="text" class="form-control" id="searchInput" placeholder="搜索公司名称..." oninput="debouncedSearch()" style="flex:1;min-width:160px">
+    <select class="form-select" id="countryFilter" onchange="loadCustomers()">
+        <option value="">所有国家</option>
+    </select>
+    <select class="form-select" id="priorityFilter" onchange="loadCustomers()">
+        <option value="">所有优先级</option>
+        <option value="A">A 级 (80-100)</option>
+        <option value="B">B 级 (60-79)</option>
+        <option value="C">C 级 (40-59)</option>
+        <option value="D">D 级 (0-39)</option>
+    </select>
+    <select class="form-select" id="statusFilter" onchange="loadCustomers()">
+        <option value="">所有状态</option>
+        <option value="待联系">待联系</option>
+        <option value="已发邮件">已发邮件</option>
+        <option value="已回复">已回复</option>
+        <option value="无效线索">无效线索</option>
+        <option value="成单">成单</option>
+    </select>
+    <select class="form-select" id="sortFilter" onchange="loadCustomers()">
+        <option value="desc">评分从高到低</option>
+        <option value="asc">评分从低到高</option>
+    </select>
+</div>
+
+<!-- 客户列表 -->
+<div class="card border-0" data-animate>
+    <div class="card-header">
+        <i class="bi bi-people-fill"></i> 客户列表
+        <span class="ms-auto badge bg-secondary rounded-pill" id="totalCount">0 个客户</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>公司名称</th>
+                        <th style="min-width:100px">跟进状态</th>
+                        <th>国家</th>
+                        <th>评级</th>
+                        <th>来源</th>
+                        <th>邮箱</th>
+                        <th>总分</th>
+                        <th>优先级</th>
+                        <th class="text-center" style="width:160px">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="customerTableBody">
+                    <tr>
+                        <td colspan="9">
+                            <div class="table-empty-state">
+                                <i class="bi bi-inbox"></i>
+                                暂无数据，请先导入 Excel 文件或使用客户发现功能
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
+    </div>
+</div>
 
-        <!-- 操作栏 -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-2 mb-2 mb-md-0">
-                        <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#importModal">
-                            <i class="bi bi-upload"></i> 导入Excel
-                        </button>
-                    </div>
-                    <div class="col-md-2 mb-2 mb-md-0">
-                        <button class="btn btn-success w-100" onclick="analyzeAll()" id="btnAnalyzeAll">
-                            <i class="bi bi-lightning"></i> 批量分析
-                        </button>
-                    </div>
-                    <div class="col-md-2 mb-2 mb-md-0">
-                        <button class="btn btn-danger w-100" onclick="stopAnalysis()" id="btnStop">
-                            <i class="bi bi-stop-circle"></i> 停止分析
-                        </button>
-                    </div>
-                    <div class="col-md-3 mb-2 mb-md-0">
-                        <a href="/api/export-excel" class="btn btn-info w-100 text-white">
-                            <i class="bi bi-download"></i> 导出Excel
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <button class="btn btn-outline-secondary w-100" onclick="refreshData()">
-                            <i class="bi bi-arrow-clockwise"></i> 刷新
-                        </button>
+<!-- 导入弹窗 -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-upload me-2"></i>导入客户名单</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">支持的格式：.xlsx / .xls，表头需包含：Company Name / Website / Country</p>
+                <div class="mb-3">
+                    <input class="form-control" type="file" id="excelFile" accept=".xlsx,.xls">
+                </div>
+                <div id="importProgress" class="d-none mb-2">
+                    <div class="progress" style="height:24px">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-teal" style="width: 100%">正在导入...</div>
                     </div>
                 </div>
+                <div id="importResult" class="d-none"></div>
             </div>
-        </div>
-
-        <!-- 分析状态提示 -->
-        <div id="analysisStatusBar" class="d-none alert alert-warning d-flex justify-content-between align-items-center py-2 mb-3">
-            <span><i class="bi bi-hourglass-split"></i> <span id="analysisStatusText">正在分析中...</span></span>
-            <button class="btn btn-sm btn-outline-danger" onclick="stopAnalysis()"><i class="bi bi-stop-circle"></i> 停止</button>
-        </div>
-
-        <!-- 筛选栏 -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <input type="text" class="form-control" id="searchInput" placeholder="搜索公司名称..." oninput="debouncedSearch()">
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select" id="countryFilter" onchange="loadCustomers()">
-                            <option value="">所有国家</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select" id="priorityFilter" onchange="loadCustomers()">
-                            <option value="">所有优先级</option>
-                            <option value="A">A级 (80-100)</option>
-                            <option value="B">B级 (60-79)</option>
-                            <option value="C">C级 (40-59)</option>
-                            <option value="D">D级 (0-39)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <select class="form-select" id="statusFilter" onchange="loadCustomers()">
-                            <option value="">所有状态</option>
-                            <option value="待联系">待联系</option>
-                            <option value="已发邮件">已发邮件</option>
-                            <option value="已回复">已回复</option>
-                            <option value="无效线索">无效线索</option>
-                            <option value="成单">成单</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select" id="sortFilter" onchange="loadCustomers()">
-                            <option value="desc">评分从高到低</option>
-                            <option value="asc">评分从低到高</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 客户列表 -->
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold"><i class="bi bi-people"></i> 客户列表</span>
-                <span class="badge bg-secondary" id="totalCount">0 个客户</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>公司名称</th>
-                                <th style="min-width:100px">跟进状态</th>
-                                <th>国家</th>
-                                <th>评级</th>
-                                <th>来源</th>
-                                <th>邮箱</th>
-                                <th>总分</th>
-                                <th>优先级</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="customerTableBody">
-                            <tr><td colspan="9" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size: 2rem;"></i><br>暂无数据，请先导入Excel文件或使用客户发现功能</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-primary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-accent" onclick="importExcel()">开始导入</button>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <!-- 导入弹窗 -->
-    <div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-upload"></i> 导入客户名单</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted">支持的Excel格式：.xlsx / .xls</p>
-                    <p class="text-muted small">表头需包含：Company Name / Website / Country</p>
-                    <div class="mb-3"><input class="form-control" type="file" id="excelFile" accept=".xlsx,.xls"></div>
-                    <div id="importProgress" class="d-none"><div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">正在导入...</div></div></div>
-                    <div id="importResult" class="d-none"></div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button class="btn btn-primary" onclick="importExcel()">开始导入</button>
-                </div>
-            </div>
-        </div>
-    </div>
+{% block extra_js %}
+<script>
+    let searchTimer = null, statusPollTimer = null;
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    window.addEventListener('beforeunload', () => {
+        if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+    });
 
-    <script>
-        let searchTimer = null, statusPollTimer = null;
-
-        // ──── 带超时的 fetch 封装（AbortController + timeout） ────
-        async function _fetchWithTimeout(url, options = {}, timeout = 15000) {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), timeout);
-            try {
-                const resp = await fetch(url, { ...options, signal: controller.signal });
-                clearTimeout(timer);
-                return resp;
-            } catch (err) {
-                clearTimeout(timer);
-                if (err.name === 'AbortError') {
-                    throw new Error('请求超时');
-                }
-                throw err;
-            }
-        }
-
-        // ──── 安全转义（防止 HTML 注入） ────
-        function _esc(str) {
-            if (str === null || str === undefined) return '';
-            const d = document.createElement('div');
-            d.textContent = String(str);
-            return d.innerHTML;
-        }
-
-        // ──── 安全的数字兜底 ────
-        function _num(val, fallback = 0) {
-            const n = Number(val);
-            return Number.isFinite(n) ? n : fallback;
-        }
-
-        // ──── 安全的数组兜底 ────
-        function _arr(val) {
-            return Array.isArray(val) ? val : [];
-        }
-
-        // ──── 页面关闭/刷新时清理轮询 ────
-        window.addEventListener('beforeunload', () => {
-            if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
-        });
-
-        async function loadCustomers() {
-            const search = document.getElementById('searchInput').value;
-            const country = document.getElementById('countryFilter').value;
-            const priority = document.getElementById('priorityFilter').value;
-            const status = document.getElementById('statusFilter').value;
-            const sort = document.getElementById('sortFilter').value;
-            let url = `/api/customers?sort_by_score=${sort}`;
-            if (search) url += `&search=${encodeURIComponent(search)}`;
-            if (country) url += `&country=${encodeURIComponent(country)}`;
-            if (priority) url += `&priority=${encodeURIComponent(priority)}`;
-            if (status) url += `&status=${encodeURIComponent(status)}`;
-            try {
-                const resp = await _fetchWithTimeout(url);
-                const data = await resp.json();
-                renderTable(data);
-                document.getElementById('totalCount').textContent = `${data.total} 个客户`;
-                const countrySelect = document.getElementById('countryFilter');
-                const currentCountry = countrySelect.value;
-                countrySelect.innerHTML = '<option value="">所有国家</option>';
-                data.countries.forEach(c => { countrySelect.innerHTML += `<option value="${c}" ${c === currentCountry ? 'selected' : ''}>${c}</option>`; });
-            } catch (err) { console.error('加载客户列表失败:', err); }
-        }
-
-        function renderTable(data) {
-            const tbody = document.getElementById('customerTableBody');
-            if (!data.customers || data.customers.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size: 2rem;"></i><br>暂无匹配的客户数据</td></tr>`;
-                return;
-            }
-            const pBadge = { 'A': 'bg-danger', 'B': 'bg-warning text-dark', 'C': 'bg-info text-dark', 'D': 'bg-secondary' };
-            const statusBadge = { '待联系': 'bg-secondary', '已发邮件': 'bg-primary', '已回复': 'bg-success', '无效线索': 'bg-dark', '成单': 'bg-warning text-dark' };
-            // 抓取/分析状态图标
-            function scrapeIcon(c) {
-                if (c.scrape_status === 'success') return '<span class="badge bg-success" title="官网抓取成功">✅</span>';
-                if (c.scrape_status === 'failed') return '<span class="badge bg-danger" title="官网抓取失败">❌</span>';
-                if (c.scrape_status === 'partial') return '<span class="badge bg-warning text-dark" title="部分抓取">⚠️</span>';
-                return '';
-            }
-            function aiIcon(c) {
-                if (c.ai_status === 'success') return '<span class="badge bg-success" title="AI分析成功">🧠</span>';
-                if (c.ai_status === 'failed') return '<span class="badge bg-danger" title="AI分析失败">💀</span>';
-                if (c.ai_status === 'skipped') return '<span class="badge bg-secondary" title="已跳过">⏭️</span>';
-                return '';
-            }
-            // 星星评级
-            function stars(rating) {
-                const n = Number(rating) || 0;
-                let s = '';
-                for (let i = 1; i <= 5; i++) {
-                    s += i <= n ? '<i class="bi bi-star-fill text-warning"></i>' : '<i class="bi bi-star text-muted"></i>';
-                }
-                return s;
-            }
-            let html = '';
-            data.customers.forEach(c => {
-                const bc = pBadge[c.priority] || 'bg-secondary';
-                const sc = c.total_score >= 80 ? 'text-danger' : c.total_score >= 60 ? 'text-warning' : c.total_score >= 40 ? 'text-info' : 'text-muted';
-                const statusCls = statusBadge[c.status] || 'bg-secondary';
-                const statusLabel = c.status || '待联系';
-                const followDate = c.follow_up_date ? `<br><small class="text-muted">📅 ${_esc(c.follow_up_date)}</small>` : '';
-                const failTip = c.fail_reason ? ` title="${_esc(c.fail_reason)}"` : '';
-                sourceIcon = c.discovery_source === 'Google' ? '<span class="badge bg-info"><i class="bi bi-google"></i> Google</span>' : '<span class="badge bg-secondary"><i class="bi bi-upload"></i> 导入</span>';
-                html += `<tr>
-                    <td><a href="/customer/${c.id}" target="_blank" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
-                    <td><span class="badge ${statusCls}">${_esc(statusLabel)}</span>${followDate}</td>
-                    <td><span class="badge bg-light text-dark">${_esc(c.country) || '-'}</span></td>
-                    <td class="small" style="white-space:nowrap">${stars(c.star_rating)}</td>
-                    <td>${sourceIcon} ${scrapeIcon(c)} ${aiIcon(c)}</td>
-                    <td><span class="badge bg-secondary">${c.email_count}</span></td>
-                    <td class="${sc} fw-bold">${c.total_score ?? '-'}</td>
-                    <td><span class="badge ${bc}">${c.priority || '-'}</span></td>
-                    <td><div class="btn-group btn-group-sm">
-                        <a href="/customer/${c.id}" target="_blank" class="btn btn-outline-primary" title="查看详情"><i class="bi bi-eye"></i></a>
-                        <button class="btn btn-outline-success" onclick="analyzeSingle(${c.id})" title="分析"><i class="bi bi-lightning"></i></button>
-                        <button class="btn btn-outline-warning" onclick="rescrapeCustomer(${c.id})" title="重新抓取"><i class="bi bi-arrow-clockwise"></i></button>
-                        <button class="btn btn-outline-info" onclick="reanalyzeCustomer(${c.id})" title="重新AI分析"><i class="bi bi-robot"></i></button>
-                        <button class="btn btn-outline-danger" onclick="deleteCustomer(${c.id})" title="删除"><i class="bi bi-trash"></i></button>
-                    </div></td>
-                </tr>`;
+    // ── 加载客户列表 ──
+    async function loadCustomers() {
+        const search = document.getElementById('searchInput').value;
+        const country = document.getElementById('countryFilter').value;
+        const priority = document.getElementById('priorityFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const sort = document.getElementById('sortFilter').value;
+        let url = `/api/customers?sort_by_score=${sort}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (country) url += `&country=${encodeURIComponent(country)}`;
+        if (priority) url += `&priority=${encodeURIComponent(priority)}`;
+        if (status) url += `&status=${encodeURIComponent(status)}`;
+        try {
+            const data = await _fetchWithTimeout(url);
+            renderTable(data);
+            document.getElementById('totalCount').textContent = `${data.total} 个客户`;
+            const countrySelect = document.getElementById('countryFilter');
+            const currentCountry = countrySelect.value;
+            countrySelect.innerHTML = '<option value="">所有国家</option>';
+            data.countries.forEach(c => {
+                countrySelect.innerHTML += `<option value="${_esc(c)}" ${c === currentCountry ? 'selected' : ''}>${_esc(c)}</option>`;
             });
-            tbody.innerHTML = html;
+        } catch (err) { console.error('加载客户列表失败:', err); }
+    }
+
+    // ── 渲染表格 ──
+    function renderTable(data) {
+        const tbody = document.getElementById('customerTableBody');
+        if (!data.customers || data.customers.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9"><div class="table-empty-state"><i class="bi bi-inbox"></i>暂无匹配的客户数据</div></td></tr>`;
+            return;
         }
 
-        async function loadStats() {
-            try {
-                const resp = await _fetchWithTimeout('/api/stats');
-                const s = await resp.json();
-                document.getElementById('statTotal').textContent = s.total;
-                document.getElementById('statAnalyzed').textContent = s.analyzed;
-                document.getElementById('statGoogle').textContent = s.discovery_stats?.google || 0;
-                document.getElementById('statGradeA').textContent = s.priority_distribution?.A || 0;
-                document.getElementById('statsBadge').innerHTML = `<i class="bi bi-database"></i> ${s.total} 客户 | ${s.analyzed} 已分析`;
-            } catch (err) { console.error('加载统计数据失败:', err); }
+        let html = '';
+        data.customers.forEach(c => {
+            const g = _gradeLabel(c.total_score);
+            const displaySources = [];
+            if (c.discovery_source === 'Google') displaySources.push('google');
+            else if (c.discovery_source === 'Similar') displaySources.push('similar');
+            else displaySources.push('excel');
+
+            const statusMap = {
+                '待联系': 'pending', '已发邮件': 'contacted', '已回复': 'qualified',
+                '无效线索': 'unqualified', '成单': 'negotiating'
+            };
+            const followDate = c.follow_up_date
+                ? `<br><small class="text-muted" style="font-size:0.75rem"><i class="bi bi-calendar3"></i> ${_esc(c.follow_up_date)}</small>`
+                : '';
+            const starHtml = _stars(c.star_rating);
+
+            html += `<tr>
+                <td><a href="/customer/${c.id}" target="_blank" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
+                <td>
+                    <span class="followup-dot ${statusMap[c.status] || 'new'}"></span>
+                    <span>${_esc(c.status || '待联系')}</span>
+                    ${followDate}
+                </td>
+                <td><span class="badge bg-light text-dark border">${_esc(c.country) || '-'}</span></td>
+                <td class="star-rating">${starHtml}</td>
+                <td class="small">
+                    ${displaySources.map(s => `<span class="badge badge-source ${s}">${s === 'google' ? 'Google' : s === 'excel' ? '导入' : '相似'}</span>`).join(' ')}
+                    ${c.scrape_status === 'success' ? '<span class="badge badge-status analyzed" style="font-size:0.7rem">已抓取</span>' : ''}
+                    ${c.scrape_status === 'failed' ? '<span class="badge badge-status error" style="font-size:0.7rem">失败</span>' : ''}
+                    ${c.ai_status === 'success' ? '<span class="badge badge-status analyzed" style="font-size:0.7rem">已分析</span>' : ''}
+                </td>
+                <td><span class="badge bg-secondary rounded-pill">${c.email_count}</span></td>
+                <td class="fw-bold fs-6 ${g.cls}">${c.total_score ?? '-'}</td>
+                <td><span class="badge rounded-pill ${g.cls === 'grade-A' ? 'bg-danger' : g.cls === 'grade-B' ? 'bg-warning text-dark' : g.cls === 'grade-C' ? 'bg-info text-dark' : 'bg-secondary'}">${c.priority || '-'}</span></td>
+                <td>
+                    <div class="btn-group btn-group-sm" style="gap:2px">
+                        <a href="/customer/${c.id}" target="_blank" class="btn btn-icon btn-outline-primary" title="查看详情"><i class="bi bi-eye"></i></a>
+                        <button class="btn btn-icon btn-outline-success" onclick="analyzeSingle(${c.id})" title="分析"><i class="bi bi-lightning"></i></button>
+                        <button class="btn btn-icon btn-outline-warning" onclick="rescrapeCustomer(${c.id})" title="重新抓取"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button class="btn btn-icon btn-outline-info" onclick="reanalyzeCustomer(${c.id})" title="重新AI分析"><i class="bi bi-robot"></i></button>
+                        <button class="btn btn-icon btn-outline-danger" onclick="deleteCustomer(${c.id})" title="删除"><i class="bi bi-trash"></i></button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function _stars(rating) {
+        const n = Number(rating) || 0;
+        let s = '';
+        for (let i = 1; i <= 5; i++) {
+            s += i <= n
+                ? '<i class="bi bi-star-fill text-warning"></i>'
+                : '<i class="bi bi-star text-muted" style="opacity:0.3"></i>';
         }
+        return s;
+    }
 
-        async function importExcel() {
-            const file = document.getElementById('excelFile').files[0];
-            if (!file) { alert('请选择Excel文件'); return; }
-            const progress = document.getElementById('importProgress');
-            const result = document.getElementById('importResult');
-            progress.classList.remove('d-none'); result.classList.add('d-none');
-            try {
-                const fd = new FormData(); fd.append('file', file);
-                const resp = await _fetchWithTimeout('/api/import-excel', { method: 'POST', body: fd }, 30000);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '导入失败');
-                result.className = 'alert alert-success mt-3';
-                result.innerHTML = `<i class="bi bi-check-circle"></i> ${data.message}<br><small>文件中 ${data.total_in_file} 条，成功导入 ${data.imported} 条</small>`;
-                result.classList.remove('d-none'); loadCustomers(); loadStats();
-            } catch (err) {
-                result.className = 'alert alert-danger mt-3';
-                result.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${err.message}`;
-                result.classList.remove('d-none');
-            } finally { progress.classList.add('d-none'); }
+    // ── 加载统计（带数字动画） ──
+    async function loadStats() {
+        try {
+            const s = await _fetchWithTimeout('/api/stats');
+            _animateNumber(document.getElementById('statTotal'), s.total);
+            _animateNumber(document.getElementById('statAnalyzed'), s.analyzed);
+            _animateNumber(document.getElementById('statGoogle'), s.discovery_stats?.google || 0);
+            _animateNumber(document.getElementById('statGradeA'), s.priority_distribution?.A || 0);
+            document.getElementById('navStatsText').textContent = `${s.total} 客户 | ${s.analyzed} 已分析`;
+        } catch (err) { console.error('加载统计数据失败:', err); }
+    }
+
+    // ── 导入Excel ──
+    async function importExcel() {
+        const file = document.getElementById('excelFile').files[0];
+        if (!file) { showToast('请选择Excel文件', 'warning'); return; }
+        const progress = document.getElementById('importProgress');
+        const result = document.getElementById('importResult');
+        progress.classList.remove('d-none');
+        result.classList.add('d-none');
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const data = await _fetchWithTimeout('/api/import-excel', { method: 'POST', body: fd }, 30000);
+            result.className = 'alert alert-success mt-3';
+            result.innerHTML = `<i class="bi bi-check-circle me-1"></i> ${data.message}<br><small class="text-muted">文件中 ${data.total_in_file} 条，成功导入 ${data.imported} 条</small>`;
+            result.classList.remove('d-none');
+            showToast('导入成功', 'success');
+            loadCustomers();
+            loadStats();
+        } catch (err) {
+            result.className = 'alert alert-danger mt-3';
+            result.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i> ${_esc(err.message)}`;
+            result.classList.remove('d-none');
+            showToast('导入失败', 'danger');
+        } finally {
+            progress.classList.add('d-none');
         }
+    }
 
-        async function analyzeSingle(id) {
-            if (!confirm('确定要分析该客户吗？')) return;
-            try {
-                const resp = await _fetchWithTimeout(`/api/analyze/${id}`, { method: 'POST' }, 120000);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '分析失败');
-                loadCustomers(); loadStats(); alert('分析完成');
-            } catch (err) { alert('分析失败: ' + err.message); }
+    // ── 分析操作 ──
+    async function analyzeSingle(id) {
+        if (!confirm('确定要分析该客户吗？')) return;
+        try {
+            await _fetchWithTimeout(`/api/analyze/${id}`, { method: 'POST' }, 120000);
+            loadCustomers(); loadStats();
+            showToast('分析完成', 'success');
+        } catch (err) {
+            showToast('分析失败: ' + err.message, 'danger');
         }
+    }
 
-        async function analyzeAll() {
-            if (!confirm('确定要分析所有未分析的客户吗？')) return;
-            const btn = document.getElementById('btnAnalyzeAll');
-            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 分析中...';
-            showAnalysisStatus('批量分析进行中...');
-            try {
-                const resp = await _fetchWithTimeout('/api/analyze-all', { method: 'POST' }, 600000);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '批量分析失败');
-                loadCustomers(); loadStats(); alert(`批量分析完成！共分析 ${data.analyzed_count} 个客户`);
-            } catch (err) { alert('批量分析失败: ' + err.message);
-            } finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-lightning"></i> 批量分析'; hideAnalysisStatus(); }
+    async function analyzeAll() {
+        if (!confirm('确定要分析所有未分析的客户吗？')) return;
+        const btn = document.getElementById('btnAnalyzeAll');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>分析中...';
+        showAnalysisStatus('批量分析进行中...');
+        try {
+            const data = await _fetchWithTimeout('/api/analyze-all', { method: 'POST' }, 600000);
+            loadCustomers(); loadStats();
+            showToast(`批量分析完成！共分析 ${data.analyzed_count} 个客户`, 'success');
+        } catch (err) {
+            showToast('批量分析失败: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning-fill me-1"></i>批量分析';
+            hideAnalysisStatus();
         }
+    }
 
-        async function stopAnalysis() {
-            try {
-                await _fetchWithTimeout('/api/stop-analysis', { method: 'POST' });
-                document.getElementById('analysisStatusText').textContent = '正在停止...';
-                setTimeout(() => { hideAnalysisStatus(); loadCustomers(); }, 2000);
-            } catch (err) { console.error('停止分析失败:', err); }
+    async function stopAnalysis() {
+        try {
+            await _fetchWithTimeout('/api/stop-analysis', { method: 'POST' });
+            document.getElementById('analysisStatusText').textContent = '正在停止...';
+            setTimeout(() => { hideAnalysisStatus(); loadCustomers(); }, 2000);
+            showToast('已发送停止信号', 'info');
+        } catch (err) { console.error('停止分析失败:', err); }
+    }
+
+    function showAnalysisStatus(text) {
+        document.getElementById('analysisStatusText').textContent = text;
+        document.getElementById('analysisStatusBar').classList.remove('d-none');
+        if (statusPollTimer) clearInterval(statusPollTimer);
+        statusPollTimer = setInterval(pollStatus, 2000);
+    }
+
+    function hideAnalysisStatus() {
+        document.getElementById('analysisStatusBar').classList.add('d-none');
+        if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+    }
+
+    async function pollStatus() {
+        try {
+            const s = await _fetchWithTimeout('/api/analysis-status');
+            if (!s.is_analyzing) {
+                hideAnalysisStatus();
+                loadCustomers();
+                loadStats();
+            } else {
+                document.getElementById('analysisStatusText').textContent = '正在分析中...';
+            }
+        } catch (err) { console.error('轮询状态失败:', err); }
+    }
+
+    // ── 删除 ──
+    async function deleteCustomer(id) {
+        if (!confirm('确定要删除该客户吗？')) return;
+        try {
+            await _fetchWithTimeout(`/api/customers/${id}`, { method: 'DELETE' });
+            loadCustomers(); loadStats();
+            showToast('已删除', 'success');
+        } catch (err) {
+            showToast('删除失败: ' + err.message, 'danger');
         }
+    }
 
-        function showAnalysisStatus(text) {
-            document.getElementById('analysisStatusText').textContent = text;
-            document.getElementById('analysisStatusBar').classList.remove('d-none');
-            if (statusPollTimer) clearInterval(statusPollTimer);
-            statusPollTimer = setInterval(pollStatus, 2000);
+    function debouncedSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { loadCustomers(); }, 400);
+    }
+
+    function refreshData() { loadCustomers(); loadStats(); }
+
+    // ── 重新抓取 / 重新分析 ──
+    async function rescrapeCustomer(id) {
+        if (!confirm('确定要重新抓取该客户的官网吗？')) return;
+        try {
+            await _fetchWithTimeout(`/api/customers/${id}/re-scrape`, { method: 'POST' }, 60000);
+            loadCustomers(); loadStats();
+            showToast('重新抓取完成', 'success');
+        } catch (err) {
+            showToast('重新抓取失败: ' + err.message, 'danger');
         }
+    }
 
-        function hideAnalysisStatus() {
-            document.getElementById('analysisStatusBar').classList.add('d-none');
-            if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+    async function reanalyzeCustomer(id) {
+        if (!confirm('确定要重新AI分析该客户吗？')) return;
+        try {
+            await _fetchWithTimeout(`/api/customers/${id}/re-analyze`, { method: 'POST' }, 120000);
+            loadCustomers(); loadStats();
+            showToast('重新分析完成', 'success');
+        } catch (err) {
+            showToast('重新分析失败: ' + err.message, 'danger');
         }
+    }
 
-        async function pollStatus() {
-            try {
-                const resp = await _fetchWithTimeout('/api/analysis-status');
-                const s = await resp.json();
-                if (!s.is_analyzing) { hideAnalysisStatus(); loadCustomers(); loadStats(); }
-                else { document.getElementById('analysisStatusText').textContent = '正在分析中...'; }
-            } catch (err) { console.error('轮询状态失败:', err); }
-        }
-
-        async function deleteCustomer(id) {
-            if (!confirm('确定要删除吗？')) return;
-            try {
-                const resp = await _fetchWithTimeout(`/api/customers/${id}`, { method: 'DELETE' });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '删除失败');
-                loadCustomers(); loadStats();
-            } catch (err) { alert('删除失败: ' + err.message); }
-        }
-
-        function debouncedSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => { loadCustomers(); }, 400); }
-        function refreshData() { loadCustomers(); loadStats(); }
-
-        // ── 重新抓取 ──
-        async function rescrapeCustomer(id) {
-            if (!confirm('确定要重新抓取该客户的官网吗？')) return;
-            try {
-                const resp = await _fetchWithTimeout(`/api/customers/${id}/re-scrape`, { method: 'POST' }, 60000);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '重新抓取失败');
-                loadCustomers(); loadStats(); alert('重新抓取完成');
-            } catch (err) { alert('重新抓取失败: ' + err.message); }
-        }
-
-        // ── 重新AI分析 ──
-        async function reanalyzeCustomer(id) {
-            if (!confirm('确定要重新AI分析该客户吗？')) return;
-            try {
-                const resp = await _fetchWithTimeout(`/api/customers/${id}/re-analyze`, { method: 'POST' }, 120000);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || '重新分析失败');
-                loadCustomers(); loadStats(); alert('重新分析完成');
-            } catch (err) { alert('重新分析失败: ' + err.message); }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => { loadCustomers(); loadStats(); });
-    </script>
-
-</body>
-</html>
+    // ── 初始化 ──
+    document.addEventListener('DOMContentLoaded', () => { loadCustomers(); loadStats(); });
+</script>
+{% endblock %}
