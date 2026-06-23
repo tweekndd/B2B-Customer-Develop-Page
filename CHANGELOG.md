@@ -1,5 +1,119 @@
 # 更新日志
 
+## v3.1.2（2026-06-23）
+
+### 🔗 Hunter × 跟进一体化 — 详情页流程闭环
+
+#### ① 后端新增：保存 Hunter 邮箱到客户 API
+
+**新增 `POST /api/customers/{customer_id}/add-emails`：**
+- 参数 `emails`：JSON 数组字符串（要添加的邮箱列表）
+- 可选参数 `set_status`：保存后自动更新跟进状态（如 `已发邮件`）
+- 去重合并：与客户已有邮箱合并去重，不产生重复记录
+- 刷新即用：写入后即刻更新数据库，前端重新加载即可看到最新邮箱列表
+
+#### ② 前端重构：详情页合并「跟进 + Hunter」为统一操作区
+
+**之前**——两个独立的卡片，查完邮箱不能直接保存，互不关联：
+
+```
+┌─ 跟进记录 ──┐  ┌─ Hunter 邮箱查找 ──┐
+│ 状态/日期    │  │ 姓名/部门 → 查    │
+│ 孤立操作     │  │ 结果只能复制       │
+└──────────────┘  └───────────────────┘
+```
+
+**之后**——一个卡片 + Tab 切换，操作闭环：
+
+```
+┌─ 邮箱查找与跟进 ────────────────────────┐
+│ [查找邮箱+标记已联系] [精确查找]         │
+│ ┌─Tab: 跟进状态 | Hunter查邮箱────────┐ │
+│ │ 跟进面板: 状态/日期/备注/评级+保存   │ │
+│ │ 快速导入: 上次Hunter结果一键保存      │ │
+│ ├─────────────────────────────────────┤ │
+│ │ Hunter面板: 域名/姓名/部门/查找      │ │
+│ │ 结果表格: 每行可复制/单存; 底部批量   │ │
+│ │ [仅保存邮箱] [保存并标记已联系]       │ │
+│ └─────────────────────────────────────┘ │
+└──────────────────────────────────────────┘
+```
+
+**一键工作流：**
+1. `查找邮箱 + 标记已联系` → 自动查 Hunter → 保存邮箱 → 设状态为"已发邮件" → 刷新
+2. 查到结果后 → 可逐条保存单个邮箱，或批量保存全部
+3. 保存后自动切换到跟进面板，直接记录备注和下次跟进日期
+
+#### ③ 周边联动
+
+- **邮箱卡片**：有网站时显示「通过 Hunter 查找」/「Hunter 查更多」按钮，指向 Hunter 面板
+- **配置状态**：卡片头实时显示 Hunter API Key 状态（✅已配置 / 🛠️测试模式 / ⚠️未配置）
+- **备注建议**：跟进备注增加 `datalist` 快速输入（已发开发信/已加 LinkedIn/已电话沟通 等）
+- **域名预填**：根据客户网址自动填充 Hunter 面板的域名
+
+---
+
+### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/api/customers.py` | 修改 — 新增 `POST /api/customers/{id}/add-emails` 端点 |
+| `app/templates/detail.html` | 修改 — Hunter × 跟进一体化整合 + 一键操作流程 |
+| `app/static/css/style.css` | 修改 — 新增 `.nav-tabs-sm` 小号 Tab 样式 |
+
+---
+
+## v3.2.0（2026-06-23）
+
+### 🔄 搜索引擎运行时切换 — Tavily / SerpAPI 前端一键切换
+
+**之前：** 搜索引擎在启动时通过 `SEARCH_ENGINE` 环境变量固定，或自动检测已配置的 API Key 决定。要切换引擎必须重启服务。
+
+**之后：** 客户发现页面顶部新增引擎切换器，运行时即可切换，无需重启。项目启动时同时传入两个 API Key，前端随时切换。
+
+#### ① 后端重构（`google_discovery.py`）
+
+- `_SEARCH_ENGINE` 从模块级常量改为 `_current_engine` 运行时变量
+- `_init_search_engine()` — 启动时初始化（兼容旧版 `SEARCH_ENGINE` 环境变量）
+- `set_search_engine(engine)` — 运行时切换引擎，检查 API Key 是否可用
+- `get_search_engine_info()` — 返回当前引擎、可用引擎列表、默认引擎
+- `search_google()` 改用 `_current_engine`，不再每次调用 `_detect_search_engine()`
+
+#### ② 新增 API 端点（`discovery.py`）
+
+| 接口 | 方法 | 说明 |
+|:-----|:-----|:------|
+| `/api/discovery/search-engine` | GET | 获取当前引擎配置 |
+| `/api/discovery/search-engine?engine=...` | POST | 运行时切换（tavily / serpapi） |
+
+#### ③ 前端切换 UI（`discovery.html`）
+
+- 「预览扩展关键词」行右侧新增 `搜索 API:` 切换按钮组
+- Tavily（☁️） / SerpAPI（🔍） 两个 Pill 按钮，当前选中高亮
+- 当前引擎状态指示器 badge（蓝色=Tavily / 绿色=SerpAPI / 灰色=未配置）
+- 未配置 API Key 的引擎自动禁用并显示提示
+- `loadSearchEngineConfig()` — 页面加载时读取引擎状态
+- `switchSearchEngine(engine)` — 点击按钮切换引擎
+
+#### ④ 启动方式
+
+```bash
+# 同时传入两个 Key，前端默认使用 Tavily
+set TAVILY_API_KEY=your-tavily-key
+set SERPAPI_API_KEY=your-serpapi-key
+python main.py
+```
+
+### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/services/google_discovery.py` | 重构 — 从模块级常量改为运行时可变引擎 |
+| `app/api/discovery.py` | 修改 — 新增 `GET/POST /api/discovery/search-engine` 端点 |
+| `app/templates/discovery.html` | 修改 — 新增引擎切换 UI + JS 逻辑 |
+
+---
+
 ## v3.0.0（2026-06-23）
 
 ### 🌟 Hunter.io 邮箱查找集成 — 配额优化 & 智能缓存

@@ -1,8 +1,7 @@
 """
-搜索发现服务（V2.2 升级）
+搜索发现服务（V2.2 升级 | V3.2 运行时切换）
 统一搜索入口，支持 SerpAPI 和 Tavily 两种搜索引擎
-通过环境变量 SEARCH_ENGINE 切换：serpapi / tavily
-如果未设置 SEARCH_ENGINE，自动根据已配置的 API Key 决定
+启动时自动检测可用的 API Key，支持运行时通过 set_search_engine() 切换
 """
 
 import os
@@ -11,29 +10,55 @@ from typing import List, Dict, Optional
 
 from app.services.country_language_map import get_language_info
 
-# ── 搜索引擎选择 ──
-# 优先级: SEARCH_ENGINE 环境变量 > 自动检测
-_SEARCH_ENGINE = os.environ.get("SEARCH_ENGINE", "").strip().lower()
+# ── 搜索引擎选择（运行时可变） ──
+# 模块启动时根据环境变量初始化，之后可通过 set_search_engine() 切换
+_current_engine: str = "none"
+_serpapi_key: str = os.environ.get("SERPAPI_API_KEY", "")
+_tavily_key: str = os.environ.get("TAVILY_API_KEY", "")
 
 
-def _detect_search_engine() -> str:
-    """自动检测可用的搜索引擎"""
-    if _SEARCH_ENGINE in ("serpapi", "tavily"):
-        return _SEARCH_ENGINE
-
-    serpapi_key = os.environ.get("SERPAPI_API_KEY", "")
-    tavily_key = os.environ.get("TAVILY_API_KEY", "")
-
-    if _SEARCH_ENGINE == "tavily":
-        return "tavily"
-    if _SEARCH_ENGINE == "serpapi":
-        return "serpapi"
+def _init_search_engine() -> str:
+    """初始化搜索引擎（仅启动时调用一次）"""
+    global _current_engine
+    forced = os.environ.get("SEARCH_ENGINE", "").strip().lower()
+    if forced in ("serpapi", "tavily"):
+        _current_engine = forced
+        return _current_engine
     # 自动检测
-    if tavily_key:
-        return "tavily"
-    if serpapi_key:
-        return "serpapi"
-    return "none"
+    if _tavily_key:
+        _current_engine = "tavily"
+    elif _serpapi_key:
+        _current_engine = "serpapi"
+    else:
+        _current_engine = "none"
+    return _current_engine
+
+
+def set_search_engine(engine: str) -> str:
+    """运行时切换搜索引擎（'tavily' | 'serpapi'）"""
+    global _current_engine
+    if engine not in ("tavily", "serpapi"):
+        return _current_engine  # 无效值，不切换
+    # 检查是否已配置对应 API Key
+    if engine == "tavily" and not _tavily_key:
+        return _current_engine
+    if engine == "serpapi" and not _serpapi_key:
+        return _current_engine
+    _current_engine = engine
+    return _current_engine
+
+
+def get_search_engine_info() -> dict:
+    """获取搜索引擎配置状态"""
+    return {
+        "current": _current_engine,
+        "available": {"tavily": bool(_tavily_key), "serpapi": bool(_serpapi_key)},
+        "default": "tavily" if _tavily_key else ("serpapi" if _serpapi_key else "none"),
+    }
+
+
+# 启动时初始化
+_init_search_engine()
 
 
 # 搜索间隔
@@ -46,10 +71,10 @@ async def search_google(
     max_results: int = 50,
 ) -> List[Dict]:
     """
-    统一搜索入口，根据配置自动选择搜索引擎
+    统一搜索入口，根据当前运行时配置选择搜索引擎
     每个结果包含：title, website, snippet
     """
-    engine = _detect_search_engine()
+    engine = _current_engine
     print(f"  使用搜索引擎: {engine}")
 
     if engine == "tavily":
@@ -66,7 +91,6 @@ async def search_google(
 # SerpAPI 实现
 # ═══════════════════════════════════════════
 
-SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
 SERPAPI_URL = "https://serpapi.com/search"
 RESULTS_PER_PAGE = 10
 
@@ -77,7 +101,7 @@ async def _search_via_serpapi(
     max_results: int = 50,
 ) -> List[Dict]:
     """通过 SerpAPI 搜索 Google"""
-    if not SERPAPI_API_KEY:
+    if not _serpapi_key:
         print("错误: 未设置 SERPAPI_API_KEY 环境变量")
         return []
 
@@ -138,7 +162,7 @@ async def _fetch_serpapi(
     from urllib.parse import urlparse
 
     params = {
-        "api_key": SERPAPI_API_KEY,
+        "api_key": _serpapi_key,
         "engine": "google",
         "q": query,
         "num": RESULTS_PER_PAGE,

@@ -245,6 +245,15 @@ body {
     padding: 1.25rem;
 }
 
+/* Tab 切换小号 */
+.nav-tabs-sm .nav-link {
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
+}
+.nav-tabs-sm .nav-link i {
+    font-size: 0.9rem;
+}
+
 .card-footer {
     background: transparent;
     border-top: 1px solid rgba(226, 232, 240, 0.6);

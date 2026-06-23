@@ -78,7 +78,7 @@
             <i class="bi bi-stop-circle me-1"></i>停止并返回
         </button>
         <div class="divider"></div>
-        <button class="btn btn-outline-info" onclick="hunterLookup()" id="btnHunter">
+        <button class="btn btn-outline-info" onclick="document.getElementById('hunterTab').click(); document.getElementById('hunterTab').scrollIntoView({behavior:'smooth', block:'start'})" id="btnHunter">
             <i class="bi bi-envelope-at me-1"></i>Hunter 查邮箱
         </button>
         <button class="btn btn-outline-secondary" onclick="window.location.href='/'">
@@ -87,94 +87,147 @@
     </div>
 
     <div class="row g-4">
-        <!-- 跟进记录 -->
+        <!-- ── 跟进 × Hunter 统一操作区 ── -->
         <div class="col-12" data-animate data-delay="100">
             <div class="card border-0">
-                <div class="card-header"><i class="bi bi-clipboard-check"></i> 跟进记录与客户评级</div>
-                <div class="card-body">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-2">
-                            <label class="form-label">跟进状态</label>
-                            <select class="form-select form-select-sm" id="followUpStatus">
-                                <option value="待联系">待联系</option>
-                                <option value="已发邮件">已发邮件</option>
-                                <option value="已回复">已回复</option>
-                                <option value="无效线索">无效线索</option>
-                                <option value="成单">成单</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">下次跟进</label>
-                            <input type="date" class="form-control form-control-sm" id="followUpDate">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">备注</label>
-                            <input type="text" class="form-control form-control-sm" id="followUpNotes" placeholder="记录跟进备注...">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">客户评级</label>
-                            <select class="form-select form-select-sm" id="starRating">
-                                <option value="0">未评级</option>
-                                <option value="1">1 星</option>
-                                <option value="2">2 星</option>
-                                <option value="3">3 星</option>
-                                <option value="4">4 星</option>
-                                <option value="5">5 星</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <button class="btn btn-accent btn-sm w-100" onclick="saveFollowUp()">
-                                <i class="bi bi-check-lg me-1"></i>保存
-                            </button>
-                        </div>
-                    </div>
-                    <div id="followUpSaved" class="d-none small text-success mt-2">
-                        <i class="bi bi-check-circle-fill"></i> 已保存
-                    </div>
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="bi bi-envelope-at me-1"></i> 邮箱查找与跟进</span>
+                    <span class="text-muted small fw-normal" id="hunterConfigBadgeDetail"></span>
                 </div>
-            </div>
-        </div>
+                <div class="card-body">
+                    <!-- 顶栏：快速操作 -->
+                    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                        <span class="text-muted small me-1">快速操作：</span>
+                        <button class="btn btn-sm btn-outline-success" onclick="hunterLookupAndSetStatus('已发邮件')" id="btnFindAndEmail">
+                            <i class="bi bi-envelope-paper me-1"></i>查找邮箱 + 标记已联系
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('hunterTab').click()">
+                            <i class="bi bi-search me-1"></i>精确查找
+                        </button>
+                    </div>
 
-        <!-- Hunter 邮箱查找 -->
-        <div class="col-12" data-animate>
-            <div class="card border-0">
-                <div class="card-header">
-                    <i class="bi bi-envelope-at"></i> Hunter 邮箱查找
-                    <span class="ms-auto text-muted small fw-normal" id="hunterStatus"></span>
-                </div>
-                <div class="card-body">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label">联系人名（可选）</label>
-                            <input type="text" class="form-control form-control-sm" id="hunterFirstName" placeholder="如 Patrick">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">联系人姓（可选）</label>
-                            <input type="text" class="form-control form-control-sm" id="hunterLastName" placeholder="如 Collison">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">部门筛选（可选）</label>
-                            <select class="form-select form-select-sm" id="hunterDepartment">
-                                <option value="">所有部门</option>
-                                <option value="executive">高管</option>
-                                <option value="it">技术</option>
-                                <option value="sales">销售</option>
-                                <option value="marketing">市场</option>
-                                <option value="finance">财务</option>
-                                <option value="hr">人事</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <button class="btn btn-accent btn-sm w-100" onclick="hunterLookup()" id="btnHunterLookup">
-                                <i class="bi bi-search me-1"></i>查找邮箱
+                    <!-- Tab 切换 -->
+                    <ul class="nav nav-tabs nav-tabs-sm mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="followUpTab" data-bs-toggle="tab" data-bs-target="#followUpPanel" type="button" role="tab">
+                                <i class="bi bi-clipboard-check me-1"></i>跟进状态
                             </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="hunterTab" data-bs-toggle="tab" data-bs-target="#hunterPanel" type="button" role="tab">
+                                <i class="bi bi-envelope-at me-1"></i>Hunter 查邮箱
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- 跟进状态面板 -->
+                        <div class="tab-pane fade show active" id="followUpPanel" role="tabpanel">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-2">
+                                    <label class="form-label">跟进状态</label>
+                                    <select class="form-select form-select-sm" id="followUpStatus">
+                                        <option value="待联系">待联系</option>
+                                        <option value="已发邮件">已发邮件</option>
+                                        <option value="已回复">已回复</option>
+                                        <option value="无效线索">无效线索</option>
+                                        <option value="成单">成单</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">下次跟进</label>
+                                    <input type="date" class="form-control form-control-sm" id="followUpDate">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">备注</label>
+                                    <input type="text" class="form-control form-control-sm" id="followUpNotes" placeholder="记录跟进备注..." list="notesSuggestions">
+                                    <datalist id="notesSuggestions">
+                                        <option value="已发开发信，等待回复">
+                                        <option value="已加 LinkedIn，等待通过">
+                                        <option value="已电话沟通，对方有意向">
+                                        <option value="需二次跟进催办">
+                                        <option value="客户表示暂时不需要">
+                                    </datalist>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">客户评级</label>
+                                    <select class="form-select form-select-sm" id="starRating">
+                                        <option value="0">未评级</option>
+                                        <option value="1">1 星</option>
+                                        <option value="2">2 星</option>
+                                        <option value="3">3 星</option>
+                                        <option value="4">4 星</option>
+                                        <option value="5">5 星</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-accent btn-sm w-100" onclick="saveFollowUp()">
+                                        <i class="bi bi-check-lg me-1"></i>保存跟进
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="followUpSaved" class="d-none small text-success mt-2">
+                                <i class="bi bi-check-circle-fill"></i> 已保存
+                            </div>
+                            <!-- 最近 Hunter 邮箱快速导入 -->
+                            <div id="quickImportArea" class="d-none mt-3 p-2 bg-light rounded border">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="small text-muted"><i class="bi bi-inbox me-1"></i>上次 Hunter 查到的邮箱尚未保存</span>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-outline-success" onclick="saveHunterEmails(null)">
+                                            <i class="bi bi-save me-1"></i>仅保存邮箱
+                                        </button>
+                                        <button class="btn btn-sm btn-accent" onclick="saveHunterEmails('已发邮件')">
+                                            <i class="bi bi-envelope-paper me-1"></i>保存并标记已联系
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div id="hunterResult" class="mt-3 d-none"></div>
-                    <div id="hunterLoading" class="mt-3 d-none">
-                        <div class="d-flex align-items-center gap-2 text-muted">
-                            <div class="spinner-border spinner-border-sm"></div>
-                            <span>正在通过 Hunter 查询邮箱...</span>
+
+                        <!-- Hunter 查找面板 -->
+                        <div class="tab-pane fade" id="hunterPanel" role="tabpanel">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="form-label">公司域名</label>
+                                    <input type="text" class="form-control form-control-sm" id="hunterDomain" readonly tabindex="-1">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">联系人名（可选）</label>
+                                    <input type="text" class="form-control form-control-sm" id="hunterFirstName" placeholder="如 Patrick" autocomplete="off">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">联系人姓（可选）</label>
+                                    <input type="text" class="form-control form-control-sm" id="hunterLastName" placeholder="如 Collison" autocomplete="off">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">部门筛选</label>
+                                    <select class="form-select form-select-sm" id="hunterDepartment">
+                                        <option value="">所有部门</option>
+                                        <option value="executive">高管</option>
+                                        <option value="it">技术</option>
+                                        <option value="sales">销售</option>
+                                        <option value="marketing">市场</option>
+                                        <option value="finance">财务</option>
+                                        <option value="hr">人事</option>
+                                        <option value="legal">法务</option>
+                                        <option value="support">客服</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button class="btn btn-accent btn-sm w-100" onclick="hunterLookup()" id="btnHunterLookup">
+                                        <i class="bi bi-search me-1"></i>查找邮箱
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="hunterResult" class="mt-3 d-none"></div>
+                            <div id="hunterLoading" class="mt-3 d-none">
+                                <div class="d-flex align-items-center gap-2 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div>
+                                    <span>正在通过 Hunter 查询邮箱...</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -317,6 +370,9 @@
         if (c.website) {
             siteEl.href = 'https://' + _esc(c.website);
             siteEl.textContent = _esc(c.website);
+            // 预填 Hunter 域名
+            const domainEl = document.getElementById('hunterDomain');
+            if (domainEl) domainEl.value = _esc(c.website);
         } else {
             siteEl.textContent = '-';
         }
@@ -369,11 +425,19 @@
 
         const ec = document.getElementById('emailsContainer');
         if (c.emails && c.emails.length > 0) {
-            ec.innerHTML = '<div class="d-flex flex-wrap gap-2">' +
+            ec.innerHTML = '<div class="d-flex flex-wrap gap-2 mb-2">' +
                 c.emails.map(e => `<span class="email-badge"><i class="bi bi-envelope-fill"></i> ${_esc(e)}</span>`).join('') +
                 '</div>';
+            // 如果有网站，显示 Hunter 查更多按钮
+            if (c.website) {
+                ec.innerHTML += `<div class="mt-1"><button class="btn btn-sm btn-outline-info" onclick="document.getElementById('hunterTab').click()"><i class="bi bi-envelope-at me-1"></i>Hunter 查更多</button></div>`;
+            }
         } else {
-            ec.innerHTML = '<p class="text-muted small mb-0">暂未提取到邮箱</p>';
+            let html = '<p class="text-muted small mb-2">暂未提取到邮箱</p>';
+            if (c.website) {
+                html += `<button class="btn btn-sm btn-outline-info" onclick="document.getElementById('hunterTab').click()"><i class="bi bi-envelope-at me-1"></i>通过 Hunter 查找</button>`;
+            }
+            ec.innerHTML = html;
         }
 
         const kc = document.getElementById('keywordsContainer');
@@ -571,6 +635,28 @@
         }
     }
 
+    // ── Hunter 配置状态 ──
+    let _lastHunterEmails = null;  // 缓存最近查到的邮箱
+
+    async function checkHunterConfigDetail() {
+        try {
+            const status = await _fetchWithTimeout('/api/hunter/status');
+            const badge = document.getElementById('hunterConfigBadgeDetail');
+            if (status.configured) {
+                if (status.test_mode) {
+                    badge.className = 'badge bg-warning text-dark';
+                    badge.textContent = '🛠️ 测试模式';
+                } else {
+                    badge.className = 'badge bg-success';
+                    badge.textContent = '✅ API 已配置';
+                }
+            } else {
+                badge.className = 'badge bg-danger';
+                badge.textContent = '⚠️ 未配置 API Key';
+            }
+        } catch (err) { /* ignore */ }
+    }
+
     // ── Hunter 邮箱查找 ──
     async function hunterLookup() {
         // 获取客户网址
@@ -601,6 +687,8 @@
             if (dept) url += `&department=${encodeURIComponent(dept)}`;
 
             const data = await _fetchWithTimeout(url, {}, 20000);
+            // 缓存结果以便后续保存
+            _lastHunterEmails = data;
             renderHunterResult(data, resultEl);
         } catch (err) {
             resultEl.classList.remove('d-none');
@@ -619,15 +707,11 @@
             container.innerHTML = `
                 <div class="alert alert-info mb-0">
                     <i class="bi bi-info-circle me-1"></i>
-                    Hunter 数据库中未找到该公司 (${_esc(data.domain)}) 的邮箱数据。
+                    Hunter 数据库中未找到该公司 (<strong>${_esc(data.domain)}</strong>) 的邮箱数据。
                     <br><small class="text-muted">可能原因：公司规模较小、Hunter 尚未抓取到该公司的公开邮箱。</small>
                 </div>`;
             return;
         }
-
-        // 更新状态显示
-        const statusEl = document.getElementById('hunterStatus');
-        statusEl.innerHTML = `<span class="badge bg-info">该域名共 ${data.total_available} 个邮箱</span>`;
 
         const emails = data.emails || [];
         if (emails.length === 0) {
@@ -640,31 +724,31 @@
             return;
         }
 
-        // 显示结果来源（节省的额度）
+        // 来源标签
         const sourceLabels = {
-            'cache': '来自缓存',
-            'domain_search': 'Domain Search',
-            'email_finder': 'Email Finder',
+            'cache': '💾 本地缓存',
+            'domain_search': '🌐 Domain Search',
+            'email_finder': '🎯 Email Finder',
         };
         const source = sourceLabels[data.source] || data.source || '未知';
         const quotaInfo = data.quota_used || {};
         const searchUsed = (quotaInfo.domain_search || 0) + (quotaInfo.email_finder || 0);
 
         let html = `
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="text-muted small">来源: <strong>${source}</strong></span>
-                <span class="text-muted small">本次消耗: ${searchUsed} 次搜索额度</span>
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+                <span class="text-muted small">来源: <strong>${source}</strong> · 共 <strong>${data.total_available}</strong> 个可用</span>
+                <span class="text-muted small">本次消耗 ${searchUsed} 次搜索额度</span>
             </div>
             <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead>
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
                         <tr>
                             <th>邮箱</th>
                             <th>姓名</th>
                             <th>职位</th>
                             <th>置信度</th>
-                            <th>验证状态</th>
-                            <th>操作</th>
+                            <th>验证</th>
+                            <th class="text-center">操作</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -676,28 +760,171 @@
             const confidence = e.confidence || 0;
             const verification = e.verification || {};
             const vStatus = verification.status || 'unknown';
-            const vBadge = vStatus === 'valid' ? 'success' : vStatus === 'accept_all' ? 'warning' : 'secondary';
-            const vLabel = vStatus === 'valid' ? '有效' : vStatus === 'accept_all' ? '待验证' : '未知';
+            const vBadge = vStatus === 'valid' ? 'success' : vStatus === 'accept_all' ? 'warning text-dark' : 'secondary';
+            const vLabel = vStatus === 'valid' ? '✅ 有效' : vStatus === 'accept_all' ? '⚠️ 待验证' : '❓ 未知';
+            const confBadge = confidence >= 90 ? 'success' : confidence >= 70 ? 'warning text-dark' : 'secondary';
 
             html += `<tr>
                 <td><code style="font-size:0.85rem">${_esc(email)}</code></td>
                 <td>${_esc(name)}</td>
-                <td>${_esc(position)}</td>
-                <td><span class="badge bg-${confidence >= 90 ? 'success' : confidence >= 70 ? 'warning' : 'secondary'}">${confidence}%</span></td>
-                <td><span class="badge bg-${vBadge}">${vLabel}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="_copyText('${_esc(email)}')" title="复制邮箱">
+                <td><small>${_esc(position)}</small></td>
+                <td><span class="badge bg-${confBadge}">${confidence}%</span></td>
+                <td><span class="badge bg-${vBadge}" style="font-size:0.75rem">${vLabel}</span></td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="_copyText('${_esc(email)}')" title="复制邮箱">
                         <i class="bi bi-clipboard"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="saveSingleHunterEmail('${_esc(email)}')" title="保存该邮箱到客户">
+                        <i class="bi bi-save"></i>
                     </button>
                 </td>
             </tr>`;
         });
 
         html += `</tbody></table></div>`;
+
+        // 批量操作栏
+        html += `
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                <span class="small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>将 ${emails.length} 个邮箱保存到客户记录
+                </span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-success" onclick="saveHunterEmails(null)">
+                        <i class="bi bi-save me-1"></i>仅保存邮箱
+                    </button>
+                    <button class="btn btn-sm btn-accent" onclick="saveHunterEmails('已发邮件')">
+                        <i class="bi bi-envelope-paper me-1"></i>保存并标记已联系
+                    </button>
+                </div>
+            </div>`;
+
         container.innerHTML = html;
+
+        // 切换到 Hunter 面板时显示快速导入提醒
+        const quickArea = document.getElementById('quickImportArea');
+        if (quickArea) {
+            quickArea.classList.remove('d-none');
+        }
+    }
+
+    // ── 保存 Hunter 邮箱到客户 ──
+    async function saveHunterEmails(setStatus) {
+        if (!_lastHunterEmails || !_lastHunterEmails.emails || _lastHunterEmails.emails.length === 0) {
+            showToast('没有可保存的邮箱，请先执行查找', 'warning');
+            return;
+        }
+
+        const emails = _lastHunterEmails.emails.map(e => e.value || e.email || '').filter(Boolean);
+        if (emails.length === 0) {
+            showToast('没有有效的邮箱地址可保存', 'warning');
+            return;
+        }
+
+        const label = setStatus ? '保存并标记已联系' : '保存邮箱';
+        const toast = showToast(`${label}中...`, 'info');
+
+        try {
+            let url = `/api/customers/${customerId}/add-emails?emails=${encodeURIComponent(JSON.stringify(emails))}`;
+            if (setStatus) url += `&set_status=${encodeURIComponent(setStatus)}`;
+
+            const result = await _fetchWithTimeout(url, { method: 'POST' });
+
+            // 隐藏快速导入提醒
+            const quickArea = document.getElementById('quickImportArea');
+            if (quickArea) quickArea.classList.add('d-none');
+
+            showToast(`✅ ${result.message}`, 'success');
+
+            // 刷新详情（更新邮箱列表和状态）
+            const c = await _fetchWithTimeout(`/api/customers/${customerId}`);
+            renderDetail(c);
+
+            // 切换到跟进面板
+            const followUpTab = document.getElementById('followUpTab');
+            if (followUpTab) followUpTab.click();
+        } catch (err) {
+            showToast('保存失败: ' + err.message, 'danger');
+        }
+    }
+
+    // ── 保存单个邮箱 ──
+    async function saveSingleHunterEmail(email) {
+        const toast = showToast('保存中...', 'info');
+        try {
+            const url = `/api/customers/${customerId}/add-emails?emails=${encodeURIComponent(JSON.stringify([email]))}`;
+            const result = await _fetchWithTimeout(url, { method: 'POST' });
+            showToast(`✅ ${result.message}`, 'success');
+            // 刷新详情
+            const c = await _fetchWithTimeout(`/api/customers/${customerId}`);
+            renderDetail(c);
+        } catch (err) {
+            showToast('保存失败: ' + err.message, 'danger');
+        }
+    }
+
+    // ── 一键查找+保存+标记已联系 ──
+    async function hunterLookupAndSetStatus(setStatus) {
+        const websiteLink = document.getElementById('website');
+        const website = websiteLink ? (websiteLink.textContent || '').trim() : '';
+        if (!website || website === '-') {
+            showToast('该客户没有官网地址', 'warning');
+            return;
+        }
+
+        // 显示加载（合并状态）
+        const btn = document.getElementById('btnFindAndEmail');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>查找并保存...';
+
+        try {
+            // 1. 查邮箱
+            const url = `/api/hunter/find-emails?website=${encodeURIComponent(website)}`;
+            const data = await _fetchWithTimeout(url, {}, 20000);
+            _lastHunterEmails = data;
+
+            const emails = (data.emails || []).map(e => e.value || e.email || '').filter(Boolean);
+
+            if (emails.length === 0) {
+                // 没查到邮箱但查到总数
+                if (data.total_available > 0) {
+                    showToast(`⚠️ 该公司有 ${data.total_available} 个邮箱，但无匹配结果，请到精确查找中调整条件`, 'warning');
+                } else {
+                    showToast(`ℹ️ Hunter 未找到该公司的邮箱`, 'info');
+                }
+                // 仍然展示结果
+                const resultEl = document.getElementById('hunterResult');
+                renderHunterResult(data, resultEl);
+                // 切换到 Hunter tab
+                document.getElementById('hunterTab').click();
+                return;
+            }
+
+            // 2. 保存邮箱 + 标记已联系
+            const saveUrl = `/api/customers/${customerId}/add-emails?emails=${encodeURIComponent(JSON.stringify(emails))}&set_status=${encodeURIComponent(setStatus)}`;
+            const saveResult = await _fetchWithTimeout(saveUrl, { method: 'POST' });
+
+            showToast(`✅ 已保存 ${emails.length} 个邮箱并标记为「${setStatus}」`, 'success');
+
+            // 3. 刷新页面
+            const c = await _fetchWithTimeout(`/api/customers/${customerId}`);
+            renderDetail(c);
+
+            // 4. 切换到跟进面板
+            const followUpTab = document.getElementById('followUpTab');
+            if (followUpTab) followUpTab.click();
+        } catch (err) {
+            showToast('操作失败: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-envelope-paper me-1"></i>查找邮箱 + 标记已联系';
+        }
     }
 
     // ── 初始化 ──
-    document.addEventListener('DOMContentLoaded', loadDetail);
+    document.addEventListener('DOMContentLoaded', () => {
+        loadDetail();
+        checkHunterConfigDetail();
+    });
 </script>
 {% endblock %}

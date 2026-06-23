@@ -28,11 +28,26 @@
             </div>
         </div>
         <div class="row mt-3">
-            <div class="col-12">
+            <div class="col-12 d-flex align-items-center gap-3">
                 <button class="btn btn-outline-primary btn-sm" onclick="previewKeywords()" id="btnPreview">
                     <i class="bi bi-magic me-1"></i>预览扩展关键词
                 </button>
-                <span id="previewResult" class="ms-2 small text-muted"></span>
+                <span id="previewResult" class="small text-muted"></span>
+                <div class="ms-auto d-flex align-items-center gap-2" id="engineSwitcher">
+                    <span class="small text-muted me-1"><i class="bi bi-arrow-left-right"></i> 搜索 API:</span>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary engine-btn" data-engine="tavily" onclick="switchSearchEngine('tavily')">
+                            <i class="bi bi-cloud-sun me-1"></i>Tavily
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary engine-btn" data-engine="serpapi" onclick="switchSearchEngine('serpapi')">
+                            <i class="bi bi-google me-1"></i>SerpAPI
+                        </button>
+                    </div>
+                    <span id="engineIndicator" class="badge rounded-pill" style="font-weight:400">—</span>
+                    <button class="btn btn-sm btn-link text-decoration-none text-muted p-0" onclick="loadSearchEngineConfig()" title="刷新状态">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -764,6 +779,65 @@
     }
 
     // ═══════════════════════════════════════════
+    // 搜索引擎切换（V3.2 新增）
+    // ═══════════════════════════════════════════
+    async function loadSearchEngineConfig() {
+        try {
+            const data = await _fetchWithTimeout('/api/discovery/search-engine');
+            const current = data.current || 'none';
+            const available = data.available || {};
+
+            // 更新切换按钮状态
+            document.querySelectorAll('.engine-btn').forEach(btn => {
+                const eng = btn.dataset.engine;
+                const isActive = eng === current;
+                btn.classList.toggle('btn-outline-secondary', !isActive);
+                btn.classList.toggle('btn-primary', isActive);
+                btn.classList.toggle('active', isActive);
+                // 不可用的引擎禁用
+                btn.disabled = !available[eng];
+                if (!available[eng]) {
+                    btn.title = eng + ' 未配置 API Key';
+                } else {
+                    btn.title = '切换到 ' + eng;
+                }
+            });
+
+            // 更新指示器
+            const indicator = document.getElementById('engineIndicator');
+            if (current === 'tavily') {
+                indicator.textContent = 'Tavily ✓';
+                indicator.className = 'badge rounded-pill bg-info';
+            } else if (current === 'serpapi') {
+                indicator.textContent = 'SerpAPI ✓';
+                indicator.className = 'badge rounded-pill bg-success';
+            } else {
+                indicator.textContent = '未配置';
+                indicator.className = 'badge rounded-pill bg-secondary';
+            }
+        } catch (err) {
+            console.error('加载搜索引擎配置失败:', err);
+        }
+    }
+
+    async function switchSearchEngine(engine) {
+        const btn = document.querySelector(`.engine-btn[data-engine="${engine}"]`);
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        try {
+            const data = await _fetchWithTimeout(
+                `/api/discovery/search-engine?engine=${encodeURIComponent(engine)}`,
+                { method: 'POST' }
+            );
+            showToast(data.message || `已切换到 ${engine}`, 'success');
+            await loadSearchEngineConfig();
+        } catch (err) {
+            showToast('切换失败: ' + err.message, 'danger');
+            btn.disabled = false;
+        }
+    }
+
+    // ═══════════════════════════════════════════
     // 初始化
     // ═══════════════════════════════════════════
     document.addEventListener('DOMContentLoaded', async () => {
@@ -771,6 +845,7 @@
         if (data && data.active_task_id) {
             _connectSSE(data.active_task_id);
         }
+        await loadSearchEngineConfig();
     });
 </script>
 {% endblock %}

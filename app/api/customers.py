@@ -383,6 +383,51 @@ def get_stats(db: Session = Depends(get_db)):
 
 
 # ═══════════════════════════════════════════
+# V3.1.2：保存 Hunter 查到的邮箱到客户记录
+# ═══════════════════════════════════════════
+
+@router.post("/customers/{customer_id}/add-emails")
+def add_customer_emails(
+    customer_id: int,
+    emails: str = Query(..., description="要添加的邮箱列表，JSON 数组字符串"),
+    set_status: Optional[str] = Query(None, description="同时设置跟进状态"),
+    db: Session = Depends(get_db),
+):
+    """将 Hunter 查到的邮箱保存到客户记录，可选同时更新跟进状态"""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+
+    try:
+        new_emails = json.loads(emails)
+        if not isinstance(new_emails, list):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="emails 参数应为 JSON 数组字符串")
+
+    # 合并去重
+    existing = _get_emails_list(customer)
+    merged = list(dict.fromkeys(existing + new_emails))  # 去重保序
+    customer.emails = json.dumps(merged, ensure_ascii=False)
+    customer.updated_at = datetime.datetime.utcnow()
+
+    # 可选更新跟进状态
+    if set_status:
+        valid_statuses = ["待联系", "已发邮件", "已回复", "无效线索", "成单"]
+        if set_status in valid_statuses:
+            customer.status = set_status
+
+    db.commit()
+    return {
+        "message": f"已添加 {len(new_emails)} 个邮箱，共 {len(merged)} 个",
+        "customer_id": customer.id,
+        "email_count": len(merged),
+        "added": len(new_emails),
+        "status": customer.status,
+    }
+
+
+# ═══════════════════════════════════════════
 # V2.2：客户跟进状态管理
 # ═══════════════════════════════════════════
 

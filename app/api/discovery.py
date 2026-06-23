@@ -17,6 +17,7 @@ from app.database import get_db, Customer, SearchTask, SessionLocal
 from app.services.search_task_service import run_search_task, request_task_stop, get_paused_tasks, resume_paused_task
 from app.services.keyword_expander import expand_keywords
 from app.services.deduplication import find_existing_customer
+from app.services.google_discovery import set_search_engine, get_search_engine_info
 
 router = APIRouter(tags=["discovery"])
 
@@ -43,6 +44,31 @@ async def api_expand_keywords(
     if not expanded:
         expanded = [keyword]
     return {"original_keyword": keyword, "expanded_keywords": expanded, "country": country}
+
+
+# ═══════════════════════════════════════════
+# 搜索引擎切换（V3.2 新增）
+# ═══════════════════════════════════════════
+
+@router.get("/discovery/search-engine")
+def api_get_search_engine():
+    """获取当前搜索引擎配置状态（当前引擎、可用引擎）"""
+    return get_search_engine_info()
+
+
+@router.post("/discovery/search-engine")
+def api_set_search_engine(engine: str = Query(..., description="搜索引擎: tavily 或 serpapi")):
+    """运行时切换搜索引擎"""
+    if engine not in ("tavily", "serpapi"):
+        raise HTTPException(status_code=400, detail=f"无效的搜索引擎: {engine}，仅支持 tavily / serpapi")
+    info = get_search_engine_info()
+    available = info.get("available", {})
+    if not available.get(engine, False):
+        raise HTTPException(status_code=400, detail=f"{engine} 未配置 API Key，无法切换")
+    result = set_search_engine(engine)
+    if result != engine:
+        raise HTTPException(status_code=500, detail="切换失败")
+    return {"message": f"已切换到 {engine}", "current": engine}
 
 
 # ═══════════════════════════════════════════
