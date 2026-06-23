@@ -1,17 +1,19 @@
 """
 客户发现 API 路由
-包含搜索任务管理、关键词扩展、相似客户扩展
+包含搜索任务管理、关键词扩展、相似客户扩展、SSE 实时流
 从 routes.py 拆分（V2.8 重构）
+V3.1.1 新增 SSE 端点取代轮询
 """
 import json
 import datetime
 import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db, Customer, SearchTask
+from app.database import get_db, Customer, SearchTask, SessionLocal
 from app.services.search_task_service import run_search_task, request_task_stop, get_paused_tasks, resume_paused_task
 from app.services.keyword_expander import expand_keywords
 from app.services.deduplication import find_existing_customer
@@ -161,6 +163,90 @@ def list_paused_tasks(db: Session = Depends(get_db)):
             "current_keyword_index": t.current_keyword_index or 0,
         })
     return {"paused_tasks": result}
+
+
+# ═══════════════════════════════════════════
+# SSE 实时任务状态流（V3.1.1 新增，替代轮询）
+# ═══════════════════════════════════════════
+
+@router.get("/discovery/task-stream/{task_id}")
+async def task_stream(task_id: int, request: Request, db: Session = Depends(get_db)):
+    """SSE 端点：推送搜索任务实时进度，任务结束时自动发送 done 事件后关闭连接。"""
+    task = db.query(SearchTask).filter(SearchTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    async def _stream_events():
+        last_status = None
+        last_kw_index = -1
+        try:
+            while True:
+                # 检查客户端是否断开
+                if await request.is_disconnected():
+                    break
+
+                db = SessionLocal()
+                try:
+                    task = db.query(SearchTask).filter(SearchTask.id == task_id).first()
+                    if not task:
+                        yield f"event: error\ndata: {json.dumps({'detail':'任务不存在'})}\n\n"
+                        break
+
+                    # 构建精简状态数据
+                    expanded = []
+                    if task.expanded_keywords:
+                        try:
+                            expanded = json.loads(task.expanded_keywords)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+                    status = task.status
+                    kw_index = task.current_keyword_index or 0
+
+                    # 状态有变化才推送
+                    changed = (status != last_status) or (kw_index != last_kw_index)
+
+                    if changed:
+                        payload = {
+                            "id": task.id,
+                            "status": status,
+                            "found_websites": task.found_websites or 0,
+                            "analyzed_companies": task.analyzed_companies or 0,
+                            "new_companies": task.new_companies or 0,
+                            "current_keyword_index": kw_index,
+                            "expanded_keywords": expanded,
+                            "error_message": task.error_message,
+                            "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+                            "keyword": task.keyword,
+                            "country": task.country,
+                            "search_depth": task.search_depth,
+                        }
+                        last_status = status
+                        last_kw_index = kw_index
+
+                        yield f"event: progress\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+                    # 终端状态 - 发送 done 后退出
+                    if status in ("Completed", "Failed", "Paused"):
+                        yield f"event: done\ndata: {json.dumps({'id': task.id, 'status': status}, ensure_ascii=False)}\n\n"
+                        break
+                finally:
+                    db.close()
+
+                await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            pass
+
+    return StreamingResponse(
+        _stream_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ═══════════════════════════════════════════

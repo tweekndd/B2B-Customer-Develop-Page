@@ -1,6 +1,6 @@
-# AI Trade Customer Analyzer V3.1
+# AI Trade Customer Analyzer V3.1.1
 
-**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + Hunter 邮箱查找
+**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + Hunter 邮箱查找 + SSE 实时流
 
 自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter 查找关键联系人邮箱 → 生成开发切入点，一站式完成。
 
@@ -162,20 +162,20 @@ python main.py
 
 ```
 AI-Trade-Customer-Analyzer/
-├── main.py                          # FastAPI 主入口（V2.8）
+├── main.py                          # FastAPI 主入口（V3.1.1）
 ├── 产品评审报告-V2.7.md              # 产品评审报告
 ├── requirements.txt                 # 依赖清单
 ├── app/
 │   ├── database.py                  # 数据库模型（7张表，含 HunterCache）
 │   ├── database_init.py             # 数据库初始化
 │   ├── api/
-│   │   ├── __init__.py              # 路由器聚合（V3.1 含 Hunter 路由）
+│   │   ├── __init__.py              # 路由器聚合（V3.1.1 含 Hunter/SSE 路由）
 │   │   ├── routes.py                # 兼容层
 │   │   ├── customers.py             # 客户管理 API
 │   │   ├── discovery.py             # 客户发现 API
 │   │   ├── sync.py                  # 数据同步 API
 │   │   ├── config.py                # 配置管理 API
-│   │   └── hunter.py                # Hunter 邮箱查找 API（V3.0 新增）
+│   │   └── hunter.py                # Hunter 邮箱查找 API
 │   ├── services/
 │   │   ├── excel_importer.py        # Excel 导入
 │   │   ├── website_scraper.py       # 官网抓取（异步）
@@ -192,7 +192,7 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── retry_manager.py         # 失败重试
 │   │   ├── similar_company_finder.py# 相似客户扩展
 │   │   ├── deduplication.py         # 智能去重工具
-│   │   ├── hunter_service.py        # Hunter.io API 客户端（V3.0 新增）
+│   │   ├── hunter_service.py        # Hunter.io API 客户端
 │   │   ├── industry_config.json     # 行业配置中心
 │   │   └── country_weights.json     # 国家权重配置
 │   ├── static/css/
@@ -202,7 +202,7 @@ AI-Trade-Customer-Analyzer/
 │       ├── detail.html              # 客户详情页（含 Hunter 邮箱查找）
 │       ├── discovery.html           # 客户发现页
 │       ├── config.html              # 评分系统配置页
-│       └── hunter.html              # Hunter 邮箱查找页（V3.0 新增）
+│       └── hunter.html              # Hunter 邮箱查找页
 ```
 
 ---

@@ -1,5 +1,5 @@
 """
-AI Trade Customer Analyzer V2.9 - 主程序入口
+AI Trade Customer Analyzer V3.1.1 - 主程序入口
 客户发现 + 客户分析 + 客户数据库平台
 """
 import os
@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理：替代已弃用的 @app.on_event"""
     init_db()
     print("=" * 50)
-    print("  AI Trade Customer Analyzer V3.0")
+    print("  AI Trade Customer Analyzer V3.1.1")
     print(" 客户发现 + AI分析 + 客户数据库 + Hunter 邮箱")
     print("=" * 50)
     print(" 访问地址: http://localhost:8000")
@@ -33,9 +33,9 @@ async def lifespan(app: FastAPI):
 templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI(
-    title="AI Trade Customer Analyzer V3.0",
+    title="AI Trade Customer Analyzer V3.1.1",
     description="客户发现 + 客户分析 + 客户数据库平台 + Hunter 邮箱查找",
-    version="3.0.0",
+    version="3.1.1",
     lifespan=lifespan,
 )
 

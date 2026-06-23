@@ -230,30 +230,103 @@
 {% block extra_js %}
 <script>
     // ═══════════════════════════════════════════
-    // 轮询管理
+    // SSE 实时任务流（V3.1.1 替代轮询）
     // ═══════════════════════════════════════════
-    let _pollTimer = null;
+    let _eventSource = null;
     let _activeTaskId = null;
-    let _lastActiveTaskKey = '';
 
-    function startPolling() {
-        if (_pollTimer) return;
-        _pollTimer = setInterval(_pollTick, 3000);
+    function _connectSSE(taskId) {
+        _disconnectSSE();
+        if (!taskId) return;
+        _activeTaskId = taskId;
+        const url = `/api/discovery/task-stream/${taskId}`;
+        _eventSource = new EventSource(url);
+
+        _eventSource.addEventListener('progress', function (e) {
+            try {
+                const data = JSON.parse(e.data);
+                _activeTaskId = data.id;
+                const kws = _arr(data.expanded_keywords);
+                const totalKw = kws.length || 1;
+                const currentIdx = _num(data.current_keyword_index);
+                const progress = data.status === 'Pending' ? 0 : _calcProgress(currentIdx, totalKw);
+                const currentKw = kws[currentIdx] || data.keyword;
+
+                updateSearchStatus(
+                    `任务 #${data.id}: ${_esc(data.country)} / ${_esc(data.keyword)}`,
+                    `正在处理第 ${Math.min(currentIdx + 1, totalKw)}/${totalKw} 个关键词: 「${_esc(currentKw)}」 | 发现 ${_num(data.found_websites)} 个网站, 新增 ${_num(data.new_companies)} 个公司`,
+                    progress, kws, currentIdx
+                );
+            } catch (err) {
+                console.error('SSE progress 解析失败:', err);
+            }
+        });
+
+        _eventSource.addEventListener('done', function (e) {
+            try {
+                const data = JSON.parse(e.data);
+                console.log(`任务 #${data.id} 结束: ${data.status}`);
+            } catch (err) { /* ignore */ }
+            _disconnectSSE();
+            _refreshAll();
+            hideSearchStatus();
+        });
+
+        _eventSource.addEventListener('error', function (e) {
+            // 服务端发送的 event: error（如任务被删除）或传输层断线
+            if (e.data) {
+                try {
+                    const data = JSON.parse(e.data);
+                    console.warn('SSE 错误:', data.detail || '');
+                } catch (err) { /* ignore */ }
+                _disconnectSSE();
+                _refreshAll();
+                hideSearchStatus();
+            } else if (_eventSource && _eventSource.readyState === EventSource.CLOSED) {
+                // 传输层断线且彻底关闭，降级兜底
+                _disconnectSSE();
+                _refreshAll();
+                if (_activeTaskId !== null) {
+                    _startFallbackCheck();
+                }
+            }
+        });
     }
 
-    function clearPolling() {
-        if (_pollTimer) {
-            clearInterval(_pollTimer);
-            _pollTimer = null;
+    function _disconnectSSE() {
+        if (_eventSource) {
+            _eventSource.close();
+            _eventSource = null;
         }
+        _activeTaskId = null;
+        _stopFallbackCheck();
     }
 
-    window.addEventListener('beforeunload', clearPolling);
+    window.addEventListener('beforeunload', _disconnectSSE);
 
-    function _checkShouldPoll() {
-        if (_activeTaskId === null && _pollTimer) {
-            clearPolling();
+    // ── 降级备用：EventSource 挂掉后兜底检查（每 10s，最多 3 次） ──
+    let _fallbackTimer = null;
+    let _fallbackCount = 0;
+
+    function _startFallbackCheck() {
+        _stopFallbackCheck();
+        _fallbackCount = 0;
+        _fallbackTimer = setInterval(() => {
+            _fallbackCount++;
+            if (_fallbackCount > 3) {
+                _stopFallbackCheck();
+                return;
+            }
+            _refreshAll();
+        }, 10000);
+    }
+
+    function _stopFallbackCheck() {
+        if (_fallbackTimer) {
+            clearInterval(_fallbackTimer);
+            _fallbackTimer = null;
         }
+        _fallbackCount = 0;
     }
 
     function _calcProgress(currentIdx, totalKw) {
@@ -310,8 +383,14 @@
                 `/api/discovery/search-task?country=${encodeURIComponent(country)}&keyword=${encodeURIComponent(keyword)}&depth=${depth}`,
                 { method: 'POST' }
             );
-            await _refreshAll();
-            startPolling();
+            const data = await _refreshAll();
+            // 连接 SSE 追踪最新活跃任务
+            if (data && data.active_task_id) {
+                _connectSSE(data.active_task_id);
+            } else {
+                // 没有活跃任务则刷新后检查
+                _startFallbackCheck();
+            }
             showToast('搜索任务已启动', 'success');
         } catch (err) {
             showToast('启动失败: ' + err.message, 'danger');
@@ -383,43 +462,7 @@
         document.getElementById('searchRunningBar').classList.add('d-none');
     }
 
-    // ═══════════════════════════════════════════
-    // 轮询回调
-    // ═══════════════════════════════════════════
-    async function _pollTick() {
-        try {
-            const data = await _fetchWithTimeout('/api/discovery/tasks');
-            _activeTaskId = data.active_task_id ?? null;
-            _renderTaskTable(data);
-
-            const activeTask = _activeTaskId
-                ? (data.tasks || []).find(t => t.id === _activeTaskId)
-                : null;
-
-            if (activeTask) {
-                const kws = _arr(activeTask.expanded_keywords);
-                const totalKw = kws.length || 1;
-                const currentIdx = _num(activeTask.current_keyword_index);
-                const progress = activeTask.status === 'Pending' ? 0 : _calcProgress(currentIdx, totalKw);
-                const currentKw = kws[currentIdx] || activeTask.keyword;
-
-                updateSearchStatus(
-                    `任务 #${activeTask.id}: ${_esc(activeTask.country)} / ${_esc(activeTask.keyword)}`,
-                    `正在处理第 ${Math.min(currentIdx + 1, totalKw)}/${totalKw} 个关键词: 「${_esc(currentKw)}」 | 发现 ${_num(activeTask.found_websites)} 个网站, 新增 ${_num(activeTask.new_companies)} 个公司`,
-                    progress, kws, currentIdx
-                );
-            } else {
-                hideSearchStatus();
-                _checkShouldPoll();
-            }
-
-            if ((_pollTick._counter || 0) % 6 === 0) loadDiscovered();
-            _pollTick._counter = (_pollTick._counter || 0) + 1;
-        } catch (err) {
-            console.error('轮询异常:', err);
-        }
-    }
-    _pollTick._counter = 0;
+    // ── _pollTick 已由 SSE (V3.1.1) 替代，不再需要轮询 ──
 
     // ═══════════════════════════════════════════
     // 渲染任务表格
@@ -482,8 +525,13 @@
     async function loadTasks() {
         try {
             const data = await _fetchWithTimeout('/api/discovery/tasks');
-            _activeTaskId = data.active_task_id ?? null;
+            const activeId = data.active_task_id ?? null;
             _renderTaskTable(data);
+            // 如果有活跃任务但未连接 SSE，自动连接
+            if (activeId && activeId !== _activeTaskId && (!_eventSource || _eventSource.readyState !== EventSource.OPEN)) {
+                _connectSSE(activeId);
+            }
+            return data;
         } catch (err) { console.error('加载任务失败:', err); }
     }
 
@@ -494,7 +542,7 @@
         try {
             await _fetchWithTimeout(`/api/discovery/tasks/${id}/resume`, { method: 'POST' });
             await _refreshAll();
-            startPolling();
+            _connectSSE(id);
             showToast('任务已恢复', 'success');
         } catch (err) {
             showToast('恢复失败: ' + err.message, 'danger');
@@ -668,7 +716,8 @@
     // 统一刷新
     // ═══════════════════════════════════════════
     async function _refreshAll() {
-        await Promise.all([loadTasks(), loadDiscovered()]);
+        const [taskData] = await Promise.all([loadTasks(), loadDiscovered()]);
+        return taskData;
     }
 
     // ═══════════════════════════════════════════
@@ -717,9 +766,11 @@
     // ═══════════════════════════════════════════
     // 初始化
     // ═══════════════════════════════════════════
-    document.addEventListener('DOMContentLoaded', () => {
-        _refreshAll();
-        startPolling();
+    document.addEventListener('DOMContentLoaded', async () => {
+        const data = await _refreshAll();
+        if (data && data.active_task_id) {
+            _connectSSE(data.active_task_id);
+        }
     });
 </script>
 {% endblock %}
