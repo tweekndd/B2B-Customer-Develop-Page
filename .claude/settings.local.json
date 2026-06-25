@@ -48,7 +48,9 @@
       "Bash(python -c \"import json; cfg=json.load\\(open\\('app/services/industry_config.json','r'\\)\\); kw=list\\(cfg['scoring']['industry_match']['keywords'].keys\\(\\)\\); print\\(f'Industry config OK - keywords: {kw[:3]}...'\\)\")",
       "Bash(python -c \"import json; cw=json.load\\(open\\('app/services/country_weights.json','r'\\)\\); print\\(f'Country weights OK - countries: {list\\(cw.keys\\(\\)\\)}'\\)\")",
       "Bash(python -m pytest tests/ -q --tb=line)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(GIT_EDITOR=true git rebase --continue)",
+      "Bash(git rebase *)"
     ]
   }
 }
