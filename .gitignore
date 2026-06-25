@@ -15,6 +15,10 @@ env/
 .idea/
 *.swp
 *.swo
+.claude/
+
+# Conversation exports
+*-this-session-is-being-continued-from-*.txt
 
 # Database
 *.db

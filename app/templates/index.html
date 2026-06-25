@@ -61,6 +61,9 @@
             <a href="/api/export-excel" class="btn btn-outline-primary">
                 <i class="bi bi-download me-1"></i>导出 Excel
             </a>
+            <button class="btn btn-outline-danger d-none" id="batchDeleteBtn" onclick="batchDeleteCustomers()">
+                <i class="bi bi-trash me-1"></i>删除所选 <span id="selectedCount" class="badge bg-danger">0</span>
+            </button>
             <button class="btn btn-outline-primary" onclick="refreshData()">
                 <i class="bi bi-arrow-clockwise me-1"></i>刷新
             </button>
@@ -117,6 +120,7 @@
             <table class="table table-hover mb-0 align-middle">
                 <thead>
                     <tr>
+                        <th style="width:36px"><input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()" title="全选/取消全选"></th>
                         <th>公司名称</th>
                         <th style="min-width:100px">跟进状态</th>
                         <th>国家</th>
@@ -130,7 +134,7 @@
                 </thead>
                 <tbody id="customerTableBody">
                     <tr>
-                        <td colspan="9">
+                        <td colspan="10">
                             <div class="table-empty-state">
                                 <i class="bi bi-inbox"></i>
                                 暂无数据，请先导入 Excel 文件或使用客户发现功能
@@ -209,7 +213,7 @@
     function renderTable(data) {
         const tbody = document.getElementById('customerTableBody');
         if (!data.customers || data.customers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9"><div class="table-empty-state"><i class="bi bi-inbox"></i>暂无匹配的客户数据</div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10"><div class="table-empty-state"><i class="bi bi-inbox"></i>暂无匹配的客户数据</div></td></tr>`;
             return;
         }
 
@@ -231,6 +235,7 @@
             const starHtml = _stars(c.star_rating);
 
             html += `<tr>
+                <td class="text-center"><input class="form-check-input customer-checkbox" type="checkbox" value="${c.id}" onchange="updateBatchDeleteBtn()"></td>
                 <td><a href="/customer/${c.id}" target="_blank" class="text-decoration-none fw-medium">${_esc(c.company_name)}</a></td>
                 <td>
                     <span class="followup-dot ${statusMap[c.status] || 'new'}"></span>
@@ -378,7 +383,42 @@
         } catch (err) { console.error('轮询状态失败:', err); }
     }
 
-    // ── 删除 ──
+    // ── 批量选择 & 删除 ──
+    function toggleSelectAll() {
+        const checked = document.getElementById('selectAll').checked;
+        document.querySelectorAll('.customer-checkbox').forEach(cb => cb.checked = checked);
+        updateBatchDeleteBtn();
+    }
+
+    function updateBatchDeleteBtn() {
+        const checked = document.querySelectorAll('.customer-checkbox:checked');
+        const btn = document.getElementById('batchDeleteBtn');
+        const count = document.getElementById('selectedCount');
+        if (checked.length > 0) {
+            btn.classList.remove('d-none');
+            count.textContent = checked.length;
+        } else {
+            btn.classList.add('d-none');
+        }
+    }
+
+    async function batchDeleteCustomers() {
+        const checked = document.querySelectorAll('.customer-checkbox:checked');
+        if (checked.length === 0) return;
+        if (!confirm(`确定要删除所选 ${checked.length} 个客户吗？此操作不可撤销。`)) return;
+        const ids = Array.from(checked).map(cb => parseInt(cb.value));
+        try {
+            const data = await _fetchWithTimeout(`/api/customers/batch-delete?ids=${encodeURIComponent(JSON.stringify(ids))}`, { method: 'POST' });
+            document.getElementById('selectAll').checked = false;
+            updateBatchDeleteBtn();
+            loadCustomers(); loadStats();
+            showToast(`已删除 ${data.deleted} 个客户`, 'success');
+        } catch (err) {
+            showToast('批量删除失败: ' + err.message, 'danger');
+        }
+    }
+
+    // ── 删除（单个） ──
     async function deleteCustomer(id) {
         if (!confirm('确定要删除该客户吗？')) return;
         try {

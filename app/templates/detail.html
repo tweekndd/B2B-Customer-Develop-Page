@@ -114,8 +114,13 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="waterfallTab" data-bs-toggle="tab" data-bs-target="#waterfallPanel" type="button" role="tab">
+                                <i class="bi bi-waterfall me-1"></i>多源查邮箱
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link" id="hunterTab" data-bs-toggle="tab" data-bs-target="#hunterPanel" type="button" role="tab">
-                                <i class="bi bi-envelope-at me-1"></i>Hunter 查邮箱
+                                <i class="bi bi-envelope-at me-1"></i>Hunter 精确
                             </button>
                         </li>
                     </ul>
@@ -181,6 +186,33 @@
                                             <i class="bi bi-envelope-paper me-1"></i>保存并标记已联系
                                         </button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 多源瀑布式查找面板 -->
+                        <div class="tab-pane fade" id="waterfallPanel" role="tabpanel">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label">公司域名</label>
+                                    <input type="text" class="form-control form-control-sm" id="waterfallDomain" readonly tabindex="-1">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button class="btn btn-accent btn-sm w-100" onclick="waterfallLookup()" id="btnWaterfallLookup">
+                                        <i class="bi bi-search me-1"></i>瀑布式查找
+                                    </button>
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end justify-content-end">
+                                    <span class="small text-muted" id="waterfallSourceInfo"></span>
+                                </div>
+                            </div>
+                            <div id="waterfallStatus" class="mt-2 d-flex align-items-center gap-2 flex-wrap"></div>
+                            <div id="waterfallResult" class="mt-3 d-none"></div>
+                            <div id="waterfallLoading" class="mt-3 d-none">
+                                <div class="d-flex align-items-center gap-2 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div>
+                                    <span id="waterfallLoadingText">正在通过多源瀑布式查找邮箱...</span>
                                 </div>
                             </div>
                         </div>
@@ -370,9 +402,11 @@
         if (c.website) {
             siteEl.href = 'https://' + _esc(c.website);
             siteEl.textContent = _esc(c.website);
-            // 预填 Hunter 域名
+            // 预填 Hunter 和瀑布式域名
             const domainEl = document.getElementById('hunterDomain');
             if (domainEl) domainEl.value = _esc(c.website);
+            const wfDomainEl = document.getElementById('waterfallDomain');
+            if (wfDomainEl) wfDomainEl.value = _esc(c.website);
         } else {
             siteEl.textContent = '-';
         }
@@ -805,6 +839,199 @@
         const quickArea = document.getElementById('quickImportArea');
         if (quickArea) {
             quickArea.classList.remove('d-none');
+        }
+    }
+
+    // ── 瀑布式多源邮箱查找 ──
+    let _lastWaterfallEmails = null;
+
+    async function waterfallLookup() {
+        const websiteLink = document.getElementById('website');
+        const website = websiteLink ? (websiteLink.textContent || '').trim() : '';
+        if (!website || website === '-') {
+            showToast('该客户没有官网地址', 'warning');
+            return;
+        }
+
+        const loadingEl = document.getElementById('waterfallLoading');
+        const resultEl = document.getElementById('waterfallResult');
+        const statusEl = document.getElementById('waterfallStatus');
+        const btn = document.getElementById('btnWaterfallLookup');
+        const loadingText = document.getElementById('waterfallLoadingText');
+
+        loadingEl.classList.remove('d-none');
+        resultEl.classList.add('d-none');
+        statusEl.innerHTML = '';
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>查找中...';
+
+        // 模拟瀑布式进度
+        loadingText.textContent = '第1级: 正在查询 Hunter...';
+        setTimeout(() => { loadingText.textContent = '第2级: Hunter 结果不足，正在查询 Tomba...'; }, 3000);
+        setTimeout(() => { loadingText.textContent = '第3级: 尝试从官网抓取...'; }, 6000);
+
+        try {
+            const data = await _fetchWithTimeout(`/api/waterfall/email-discovery?website=${encodeURIComponent(website)}`, {}, 30000);
+            _lastWaterfallEmails = data;
+            renderWaterfallResult(data, resultEl, statusEl);
+        } catch (err) {
+            resultEl.classList.remove('d-none');
+            resultEl.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>查询失败: ${_esc(err.message)}</div>`;
+        } finally {
+            loadingEl.classList.add('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>瀑布式查找';
+        }
+    }
+
+    function renderWaterfallResult(data, container, statusEl) {
+        container.classList.remove('d-none');
+
+        // 来源信息
+        const sourceLabels = { hunter: '🔵 Hunter', tomba: '🟣 Tomba', scraped: '🟢 网页抓取' };
+        const sourceInfo = document.getElementById('waterfallSourceInfo');
+        if (data.sources_used && data.sources_used.length > 0) {
+            sourceInfo.innerHTML = data.sources_used.map(s => sourceLabels[s] || s).join(' → ');
+        }
+
+        // 瀑布级联状态
+        let statusHtml = '';
+        if (data.waterfall_log) {
+            data.waterfall_log.forEach(log => {
+                const srcLabel = sourceLabels[log.source] || log.source;
+                if (log.skipped) {
+                    statusHtml += `<span class="badge bg-secondary">${srcLabel} ⏭️ 跳过（已有足够结果）</span>`;
+                } else if (log.found > 0) {
+                    statusHtml += `<span class="badge bg-success">${srcLabel} ✅ ${log.found} 个</span>`;
+                } else {
+                    statusHtml += `<span class="badge bg-info text-dark">${srcLabel} 🔍 无结果</span>`;
+                }
+            });
+        }
+        statusEl.innerHTML = statusHtml;
+
+        if (data.total === 0) {
+            container.innerHTML = `
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    所有数据源均未找到 <strong>${_esc(data.domain)}</strong> 的邮箱。
+                    <br><small class="text-muted">建议：尝试手动在官网查找联系方式，或使用 Hunter 精确查找（按姓名）。</small>
+                </div>`;
+            return;
+        }
+
+        const emails = data.emails || [];
+        let html = `
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+                <span class="text-muted small">共找到 <strong>${data.total}</strong> 个邮箱 · 综合排序</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>邮箱</th>
+                            <th>姓名</th>
+                            <th>职位</th>
+                            <th>部门</th>
+                            <th>来源</th>
+                            <th>评分</th>
+                            <th>领英</th>
+                            <th class="text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        emails.forEach(e => {
+            const email = e.email || '';
+            const name = e.full_name || [e.first_name, e.last_name].filter(Boolean).join(' ') || '-';
+            const position = e.position || '-';
+            const dept = e.department || '-';
+            const source = e.source || '?';
+            const score = e.score || 0;
+
+            const sourceBadge = source === 'tomba' ? 'primary' : source === 'hunter' ? 'success' : 'warning text-dark';
+            const sourceLabel = sourceLabels[source] || source;
+            const linkedin = e.linkedin || '';
+
+            // 验证状态
+            const verification = e.verification || '';
+            const vIcon = verification === 'valid' ? '✅' : verification === 'unknown' ? '❓' : '';
+
+            html += `<tr>
+                <td><code style="font-size:0.85rem">${_esc(email)}</code></td>
+                <td>${_esc(name)}</td>
+                <td><small>${_esc(position)}</small></td>
+                <td><small>${_esc(dept)}</small></td>
+                <td><span class="badge bg-${sourceBadge}" style="font-size:0.7rem">${sourceLabel}</span></td>
+                <td><span class="badge bg-${score >= 70 ? 'success' : score >= 40 ? 'warning text-dark' : 'secondary'}">${score}</span></td>
+                <td>${linkedin ? `<a href="${_esc(linkedin)}" target="_blank" class="text-decoration-none text-primary"><i class="bi bi-linkedin"></i></a>` : '<span class="text-muted">—</span>'}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="_copyText('${_esc(email)}')" title="复制邮箱">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="saveSingleEmail('${_esc(email)}')" title="保存该邮箱到客户">
+                        <i class="bi bi-save"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+
+        // 批量操作
+        html += `
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                <span class="small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>将 ${emails.length} 个邮箱保存到客户记录
+                </span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-success" onclick="saveWaterfallEmails(null)">
+                        <i class="bi bi-save me-1"></i>仅保存邮箱
+                    </button>
+                    <button class="btn btn-sm btn-accent" onclick="saveWaterfallEmails('已发邮件')">
+                        <i class="bi bi-envelope-paper me-1"></i>保存并标记已联系
+                    </button>
+                </div>
+            </div>`;
+
+        container.innerHTML = html;
+    }
+
+    // ── 保存瀑布式查到的邮箱 ──
+    async function saveWaterfallEmails(setStatus) {
+        if (!_lastWaterfallEmails || !_lastWaterfallEmails.emails || _lastWaterfallEmails.emails.length === 0) {
+            showToast('没有可保存的邮箱，请先执行查找', 'warning');
+            return;
+        }
+
+        const emails = _lastWaterfallEmails.emails.map(e => e.email).filter(Boolean);
+        if (emails.length === 0) {
+            showToast('没有有效的邮箱地址可保存', 'warning');
+            return;
+        }
+
+        try {
+            let url = `/api/customers/${customerId}/add-emails?emails=${encodeURIComponent(JSON.stringify(emails))}`;
+            if (setStatus) url += `&set_status=${encodeURIComponent(setStatus)}`;
+
+            const result = await _fetchWithTimeout(url, { method: 'POST' });
+            showToast(`已保存 ${result.added} 个邮箱，共 ${result.email_count} 个`, 'success');
+            // 刷新跟进区域状态
+            if (setStatus) {
+                document.getElementById('followUpStatus').value = setStatus;
+            }
+        } catch (err) {
+            showToast('保存失败: ' + err.message, 'danger');
+        }
+    }
+
+    async function saveSingleEmail(email) {
+        try {
+            const url = `/api/customers/${customerId}/add-emails?emails=${encodeURIComponent(JSON.stringify([email]))}`;
+            const result = await _fetchWithTimeout(url, { method: 'POST' });
+            showToast(`已保存 1 个邮箱`, 'success');
+        } catch (err) {
+            showToast('保存失败: ' + err.message, 'danger');
         }
     }
 

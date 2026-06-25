@@ -14,6 +14,8 @@ from app.api.discovery import router as _discovery  # noqa: E402
 from app.api.sync import router as _sync            # noqa: E402
 from app.api.config import router as _config        # noqa: E402
 from app.api.hunter import router as _hunter        # noqa: E402
+from app.api.tomba import router as _tomba          # noqa: E402
+from app.api.waterfall import router as _waterfall  # noqa: E402
 
 # 合并路由（子路由器无 prefix，由顶层 /api 统一提供）
 router.include_router(_customers)
@@ -21,4 +23,6 @@ router.include_router(_discovery)
 router.include_router(_sync)
 router.include_router(_config)
 router.include_router(_hunter)
+router.include_router(_tomba)
+router.include_router(_waterfall)
 

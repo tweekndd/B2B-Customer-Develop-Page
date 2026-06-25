@@ -1,0 +1,8 @@
+A列 Country
+B列 Company Name
+C列 二次开发（可空）
+D列 邮箱
+E列 电话
+F列 备注（可空）
+G列 Website
+H列 领英（可空）

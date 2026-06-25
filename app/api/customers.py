@@ -315,6 +315,8 @@ def get_analysis_status():
 
 @router.get("/export-excel")
 def export_excel(db: Session = Depends(get_db)):
+    """导出客户列表为 Excel，按以下规则生成列：
+       A-Country | B-Company Name | C-二次开发 | D-邮箱 | E-电话 | F-备注 | G-Website | H-领英"""
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     import io
@@ -323,36 +325,81 @@ def export_excel(db: Session = Depends(get_db)):
     customers = db.query(Customer).order_by(Customer.total_score.desc().nullslast()).all()
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "客户分析结果"
-    header_font = Font(bold=True, color="FFFFFF", size=11)
+    ws.title = "客户列表"
+
+    # 样式定义
+    header_font = Font(bold=True, color="FFFFFF", size=11, name="微软雅黑")
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-    headers = ["公司名称", "国家", "官网", "邮箱数量", "总分", "优先级", "公司类型", "发现来源", "发现关键词", "AI摘要", "开发切入点", "推荐联系职位", "分析时间"]
+    cell_alignment = Alignment(vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'),
+    )
+
+    # 列头（严格按文档规则）
+    headers = [
+        "Country",          # A列
+        "Company Name",     # B列
+        "公司概况",          # C列（可空）
+        "邮箱",              # D列
+        "电话",              # E列（可空）
+        "备注",              # F列（可空）
+        "Website",          # G列
+        "领英",              # H列（可空）
+        "跟进状态",          # I列
+        "AI评分",            # J列
+    ]
+
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
-        cell.font = header_font; cell.fill = header_fill; cell.alignment = header_alignment; cell.border = thin_border
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
     for row_idx, c in enumerate(customers, 2):
+        # 邮箱列表转为逗号分隔的文本
         emails = _get_emails_list(c)
+        email_text = ", ".join(emails) if emails else ""
+
         row_data = [
-            c.company_name, c.country or "", c.website or "", len(emails),
-            c.total_score or 0, c.priority or "-", c.company_type or "",
-            c.discovery_source or "", c.discovery_keyword or "",
-            c.ai_summary or "", c.sales_hook or "", c.target_position or "",
-            c.analyzed_at.strftime("%Y-%m-%d %H:%M") if c.analyzed_at else "",
+            c.country or "",                          # A: Country
+            c.company_name or "",                     # B: Company Name
+            c.ai_summary or "",                       # C: 公司概况（可空）
+            email_text,                                # D: 邮箱（多个用逗号分隔）
+            "",                                        # E: 电话（暂无数据，可空）
+            c.notes or "",                             # F: 备注（可空）
+            c.website or "",                           # G: Website
+            "",                                        # H: 领英（暂无数据，可空）
+            c.status or "待联系",                       # I: 跟进状态
+            c.total_score if c.total_score is not None else "",  # J: AI评分
         ]
         for col, value in enumerate(row_data, 1):
             cell = ws.cell(row=row_idx, column=col, value=value)
-            cell.border = thin_border; cell.alignment = Alignment(vertical="center", wrap_text=True)
-    for i, w in enumerate([25, 15, 35, 10, 8, 8, 18, 12, 20, 35, 30, 20, 18], 1):
+            cell.border = thin_border
+            cell.alignment = cell_alignment
+
+    # 列宽（适配各列内容）
+    col_widths = [15, 30, 40, 40, 15, 25, 35, 30, 12, 10]
+    for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    # 冻结首行
+    ws.freeze_panes = "A2"
+
     output = io.BytesIO()
-    wb.save(output); output.seek(0)
-    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=customers_export.xlsx"})
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=customers_export.xlsx"},
+    )
 
 
 # ═══════════════════════════════════════════
-# 客户删除 & 统计
+# 客户删除 & 批量删除 & 统计
 # ═══════════════════════════════════════════
 
 @router.delete("/customers/{customer_id}")
@@ -362,6 +409,29 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="客户不存在")
     db.delete(customer); db.commit()
     return {"message": "删除成功"}
+
+
+@router.post("/customers/batch-delete")
+def batch_delete_customers(
+    ids: str = Query(..., description="要删除的客户ID列表，JSON数组字符串"),
+    db: Session = Depends(get_db),
+):
+    """批量删除客户（支持全选/多选后统一删除）"""
+    try:
+        customer_ids = json.loads(ids)
+        if not isinstance(customer_ids, list) or not customer_ids:
+            raise HTTPException(status_code=400, detail="ids 应为非空JSON数组")
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="ids 参数格式错误")
+
+    deleted = 0
+    for cid in customer_ids:
+        customer = db.query(Customer).filter(Customer.id == cid).first()
+        if customer:
+            db.delete(customer)
+            deleted += 1
+    db.commit()
+    return {"message": f"成功删除 {deleted} 个客户", "deleted": deleted}
 
 
 @router.get("/stats")

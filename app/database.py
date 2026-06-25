@@ -136,6 +136,34 @@ class HunterCache(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
 
 
+class TombaCache(Base):
+    """Tomba API 查询缓存（Phase 1 新增，避免重复消耗搜索额度）"""
+    __tablename__ = "tomba_cache"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    cache_key = Column(String(500), nullable=False, unique=True, index=True, comment="缓存唯一键: domain|type|params")
+    domain = Column(String(255), nullable=False, index=True, comment="公司域名")
+    query_type = Column(String(30), nullable=False, comment="查询类型: domain_search/email_finder/email_verifier")
+    result = Column(Text, nullable=False, comment="API 返回结果 (JSON)")
+    hits = Column(Integer, default=1, comment="缓存命中次数（辅助统计）")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
+
+
+class EmailQuotaLog(Base):
+    """邮箱发现配额使用日志（Phase 1 新增，持久化记录各平台配额消耗）"""
+    __tablename__ = "email_quota_log"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    source = Column(String(30), nullable=False, comment="数据源: hunter/tomba/scraped")
+    query_type = Column(String(30), nullable=False, comment="查询类型")
+    domain = Column(String(255), nullable=False, comment="查询的域名")
+    result_count = Column(Integer, default=0, comment="返回结果数量")
+    credits_consumed = Column(Integer, default=0, comment="消耗的配额次数")
+    success = Column(Integer, default=1, comment="是否成功: 1成功/0失败")
+    error_message = Column(String(500), nullable=True, comment="错误信息")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="记录时间")
+
+
 class AnalysisCache(Base):
     """AI分析缓存（V2.0 新增，避免重复调用DeepSeek）"""
     __tablename__ = "analysis_cache"

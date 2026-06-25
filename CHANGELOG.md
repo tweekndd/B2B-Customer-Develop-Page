@@ -63,9 +63,106 @@
 
 ---
 
-## v3.2.0（2026-06-23）
+## v3.2.1（2026-06-25）
 
-### 🔄 搜索引擎运行时切换 — Tavily / SerpAPI 前端一键切换
+### 🌊 Phase 1 — 瀑布式多源邮箱发现
+
+#### 背景
+
+当前邮箱发现仅依赖 Hunter.io（25次/月免费），月中易耗尽。Phase 1 引入 **Tomba.io** 作为第二数据源 + 自研官网抓取兜底，构建三级瀑布式级联，不增加成本提升邮箱发现成功率。
+
+#### 核心思路：瀑布式调用
+
+```
+输入：公司域名
+       ↓
+[第1级] Hunter.io domain search
+       ↓ 无结果或 < 2 条
+[第2级] Tomba.io domain search（无结果不扣费）
+       ↓ 仍无结果
+[第3级] 官网 HTML mailto: 抓取兜底
+       ↓
+结果合并 → 去重 → 评分排序（来源权重+验证状态+职位级别+置信度）
+```
+
+#### 新增模块
+
+##### ① Tomba API 客户端 — `app/services/tomba_service.py`
+
+- `TombaClient` 类（结构与 `HunterClient` 一致）
+- 双认证：`X-Tomba-Key` + `X-Tomba-Secret`
+- 域名搜索 `domain_search()` / 精确查找 `email_finder()`
+- 本地 SQLite 缓存层（7天 TTL）
+- 配额记录持久化到 `email_quota_log` 表
+- 无结果不扣费（Tomba 官方策略）
+
+##### ② Tomba API 路由 — `app/api/tomba.py`
+
+| 接口 | 方法 | 说明 |
+|:-----|:-----|:------|
+| `/api/tomba/status` | GET | 配置状态 |
+| `/api/tomba/domain-search` | GET | 域名搜索（返回含领英/电话/部门） |
+| `/api/tomba/find-person` | GET | 精确查找某人 |
+| `/api/tomba/usage` | GET | 配额统计 + 缓存统计 |
+| `/api/tomba/clear-cache` | POST | 清除缓存 |
+| `/api/tomba/cache-entries` | GET | 缓存条目列表 |
+
+##### ③ 瀑布式编排 — `app/services/waterfall_discovery.py`
+
+- `waterfall_email_discovery(website)` — 统一入口
+- Hunter → Tomba → 自研抓取三级级联
+- 结果数低于 `EMAIL_DISCOVERY_MIN_RESULTS`（默认 2）才触发下一级
+- `_merge_and_dedup()` — 多源结果去重（Tomba > Hunter > scraped）
+- `_score_and_sort()` — 综合排序（来源权重30/25/10 + 验证状态30/15 + 职位级别 + 置信度）
+
+##### ④ 瀑布式 API — `app/api/waterfall.py`
+
+| 接口 | 方法 | 说明 |
+|:-----|:-----|:------|
+| `/api/waterfall/email-discovery` | GET | 瀑布式邮箱发现入口 |
+| `/api/waterfall/quota-history` | GET | 各平台配额使用历史 |
+
+##### ⑤ 数据库扩展 — `app/database.py`
+
+| 表 | 说明 |
+|----|------|
+| `tomba_cache` | Tomba 查询缓存（7天 TTL） |
+| `email_quota_log` | 邮箱发现配额持久化记录 |
+
+#### 前端
+
+- **客户详情页** — 新增「多源查邮箱」Tab（瀑布式查找）
+- 实时显示瀑布级联进度（第1级 Hunter → 第2级 Tomba → 第3级 网页抓取）
+- 结果表格展示：邮箱、姓名、职位、部门、来源、评分、领英、操作
+- 批量保存邮箱 / 保存并标记已联系
+- **Hunter 精确查找 Tab 保留**，作为补充手动查找
+
+#### 配置
+
+```bash
+# Tomba（瀑布式第二数据源）
+set TOMBA_API_KEY=ta_xxxxxxxxxx
+set TOMBA_API_SECRET=ts_xxxxxxxxxx
+
+# 瀑布式行为控制
+set EMAIL_DISCOVERY_MIN_RESULTS=2
+set EMAIL_DISCOVERY_ENABLE_SCRAPING=true
+```
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/services/tomba_service.py` | **新建** — Tomba API 客户端 |
+| `app/api/tomba.py` | **新建** — Tomba API 路由 |
+| `app/services/waterfall_discovery.py` | **新建** — 瀑布式编排引擎 |
+| `app/api/waterfall.py` | **新建** — 瀑布式 API 路由 |
+| `app/database.py` | 修改 — 新增 TombaCache + EmailQuotaLog 表 |
+| `app/api/__init__.py` | 修改 — 注册 Tomba + Waterfall 路由 |
+| `app/templates/detail.html` | 修改 — 新增多源查邮箱 Tab + 瀑布式查找 UI |
+| `README.md` | 修改 — 功能概览/配置/结构/数据库表更新 |
+
+### 🔄 搜索引擎运行时切换（承接 V3.2）— Tavily / SerpAPI 前端一键切换
 
 **之前：** 搜索引擎在启动时通过 `SEARCH_ENGINE` 环境变量固定，或自动检测已配置的 API Key 决定。要切换引擎必须重启服务。
 

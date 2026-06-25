@@ -1,6 +1,6 @@
-# AI Trade Customer Analyzer V3.1.1
+# AI Trade Customer Analyzer V3.2.1
 
-**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + Hunter 邮箱查找 + SSE 实时流
+**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 瀑布式邮箱查找 + SSE 实时流
 
 自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter 查找关键联系人邮箱 → 生成开发切入点，一站式完成。
 
@@ -21,6 +21,8 @@
 | **网页配置编辑器** | 通过网页修改行业关键词、评分权重、国家优先级，保存后即时生效，无需重启 |
 | **相似客户扩展** | 输入公司网址 + 目标国家，自动搜索相似客户，支持多语言本地化搜索 |
 | **Hunter 邮箱查找** | 通过 Hunter.io API 查找公司内部联系人的工作邮箱。支持域名搜索、姓名精确查找、部门/级别筛选，含本地缓存层和额度优化策略 |
+| **Tomba 邮箱查找** | 通过 Tomba.io API 查找邮箱，返回数据更丰富（含领英、电话、部门、置信度评分）。无结果不扣费 |
+| **瀑布式邮箱发现** | 三级级联：Hunter → Tomba → 官网抓取兜底，自动按结果数量决定是否触发下一级，最大化免费额度利用率 |
 | **智能去重** | 域名 + 标准化公司名双重去重，自动合并重复发现的关键词 |
 | **三级缓存** | 搜索缓存(30天) + 官网缓存(7天) + AI分析缓存(内容哈希) — 避免重复消耗 API 配额 |
 | **断点续跑** | 搜索任务意外中断后，重新启动自动从断点继续 |
@@ -63,6 +65,12 @@ pip install -r requirements.txt
 - 前往 https://hunter.io/api-keys 注册获取 API Key
 - 免费套餐每月 25 次搜索 + 50 次验证查询
 - 测试时可使用 `test-api-key`（返回模拟测试数据）
+
+#### Tomba.io（瀑布式邮箱发现第二数据源，可选）
+- 前往 https://tomba.io 注册获取 API Key 和 Secret
+- 免费套餐每月 25 次搜索 + 50 次验证
+- 无结果不扣费，同一域名 30 天内重复查询只计一次
+- 返回数据含领英链接、电话号码、部门信息、置信度评分，比 Hunter 更丰富
   
 ### 4. 启动系统
 
@@ -100,6 +108,11 @@ python main.py
 | `HUNTER_API_KEY` | — | Hunter.io API Key。配置后在页面显示"已配置"，可使用邮箱查找功能 |
 | `HUNTER_CACHE_TTL` | `604800` (7天) | Hunter 查询结果在本地缓存的秒数 |
 | `HUNTER_REQUEST_DELAY` | `0.3` | Hunter API 请求间隔秒数，避免触发速率限制 |
+| `TOMBA_API_KEY` | — | Tomba.io API Key（瀑布式查找第二数据源） |
+| `TOMBA_API_SECRET` | — | Tomba.io API Secret（与 Key 配对使用） |
+| `TOMBA_CACHE_TTL` | `604800` (7天) | Tomba 查询结果在本地缓存的秒数 |
+| `EMAIL_DISCOVERY_MIN_RESULTS` | `2` | 瀑布式邮箱发现：结果数低于此值才触发下一级 |
+| `EMAIL_DISCOVERY_ENABLE_SCRAPING` | `true` | 瀑布式邮箱发现：是否启用官网抓取兜底 |
 
 > **搜索引擎选择说明：** 系统同时支持 SerpAPI 和 Tavily 两种搜索后端。启动时按以下逻辑决定：
 > 1. 如果设置了 `SEARCH_ENGINE` 环境变量（`serpapi` 或 `tavily`），则强制使用指定引擎
@@ -156,6 +169,18 @@ python main.py
 
 > **注意：** 使用前需设置 `HUNTER_API_KEY` 环境变量。免费套餐每月 25 次搜索查询。
 
+### 瀑布式邮箱发现（Phase 1）
+
+系统提供多数据源级联邮箱查找，最大化免费额度利用率：
+
+1. **第1级 — Hunter.io**：保留为第一优先级，直接使用已有集成
+2. **第2级 — Tomba.io**：Hunter 结果不足时自动触发，返回数据含领英、电话、部门，无结果不扣费
+3. **第3级 — 官网抓取兜底**：前两级均无数据时，从官网 HTML 提取 `mailto:` 链接
+
+在客户详情页点击「多源查邮箱」Tab 即可使用，结果按综合得分排序（来源权重 + 验证状态 + 职位级别 + 置信度）。
+
+> **配置：** 需设置 `TOMBA_API_KEY` 和 `TOMBA_API_SECRET` 环境变量启用 Tomba 数据源。自研抓取默认开启，可通过 `EMAIL_DISCOVERY_ENABLE_SCRAPING=false` 关闭。
+
 ---
 
 ## 项目结构
@@ -175,7 +200,9 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── discovery.py             # 客户发现 API
 │   │   ├── sync.py                  # 数据同步 API
 │   │   ├── config.py                # 配置管理 API
-│   │   └── hunter.py                # Hunter 邮箱查找 API
+│   │   ├── hunter.py                # Hunter 邮箱查找 API
+│   │   ├── tomba.py                 # Tomba 邮箱查找 API
+│   │   └── waterfall.py             # 瀑布式邮箱发现 API
 │   ├── services/
 │   │   ├── excel_importer.py        # Excel 导入
 │   │   ├── website_scraper.py       # 官网抓取（异步）
@@ -193,6 +220,8 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── similar_company_finder.py# 相似客户扩展
 │   │   ├── deduplication.py         # 智能去重工具
 │   │   ├── hunter_service.py        # Hunter.io API 客户端
+│   │   ├── tomba_service.py         # Tomba.io API 客户端
+│   │   ├── waterfall_discovery.py   # 瀑布式邮箱发现编排
 │   │   ├── industry_config.json     # 行业配置中心
 │   │   └── country_weights.json     # 国家权重配置
 │   ├── static/css/
@@ -217,6 +246,8 @@ AI-Trade-Customer-Analyzer/
 | `website_cache` | 官网抓取缓存（7天有效） |
 | `analysis_cache` | AI 分析缓存（内容哈希比对） |
 | `hunter_cache` | Hunter 邮箱查询缓存（7天有效，自动记录命中次数） |
+| `tomba_cache` | Tomba 邮箱查询缓存（7天有效） |
+| `email_quota_log` | 邮箱发现配额使用日志（持久化记录各平台消耗） |
 
 ---
 
@@ -289,5 +320,5 @@ pytest tests/ -q     # 简洁输出
 - **前端**：Bootstrap 5 + JavaScript
 - **AI**：DeepSeek API
 - **搜索**：SerpAPI / Tavily
-- **邮箱**：Hunter.io API（本地 SQLite 缓存层，7天 TTL）
+- **邮箱**：Hunter.io + Tomba.io 双数据源 + 官网抓取兜底（瀑布式三级级联）
 - **爬虫**：httpx + BeautifulSoup（异步并发）
