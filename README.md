@@ -74,10 +74,16 @@ pip install -r requirements.txt
   
 ### 4. 启动系统
 
+以下为完整配置示例（包含全部可选 API Key）。最少只需配置 `DEEPSEEK_API_KEY` + 任一搜索引擎（`SERPAPI_API_KEY` 或 `TAVILY_API_KEY`）即可启动，其余为可选功能。
+
 **Windows (CMD):**
 ```cmd
 set DEEPSEEK_API_KEY=sk-your-deepseek-api-key
 set SERPAPI_API_KEY=your-serpapi-api-key
+set TAVILY_API_KEY=tvly-your-tavily-api-key
+set HUNTER_API_KEY=your-hunter-api-key
+set TOMBA_API_KEY=ta-your-tomba-key
+set TOMBA_API_SECRET=ts-your-tomba-secret
 python main.py
 ```
 
@@ -85,6 +91,10 @@ python main.py
 ```bash
 export DEEPSEEK_API_KEY=sk-your-deepseek-api-key
 export SERPAPI_API_KEY=your-serpapi-api-key
+export TAVILY_API_KEY=tvly-your-tavily-api-key
+export HUNTER_API_KEY=your-hunter-api-key
+export TOMBA_API_KEY=ta-your-tomba-key
+export TOMBA_API_SECRET=ts-your-tomba-secret
 python main.py
 ```
 
@@ -92,6 +102,10 @@ python main.py
 ```powershell
 $env:DEEPSEEK_API_KEY="sk-your-deepseek-api-key"
 $env:SERPAPI_API_KEY="your-serpapi-api-key"
+$env:TAVILY_API_KEY="tvly-your-tavily-api-key"
+$env:HUNTER_API_KEY="your-hunter-api-key"
+$env:TOMBA_API_KEY="ta-your-tomba-key"
+$env:TOMBA_API_SECRET="ts-your-tomba-secret"
 python main.py
 ```
 
