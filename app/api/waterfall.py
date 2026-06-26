@@ -1,6 +1,6 @@
 """
-瀑布式邮箱发现 API 路由（Phase 1 新增）
-多源级联查找：Hunter → Tomba → 自研抓取兜底
+瀑布式邮箱发现 API 路由（Phase 1 新增 | V3.2.2 加入 Prospeo）
+多源级联查找：Hunter → Tomba → Prospeo → 自研抓取兜底
 """
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, EmailQuotaLog
 from app.services.waterfall_discovery import waterfall_email_discovery
+from app.services.prospeo_service import PROSPEO_API_KEY
 
 router = APIRouter(tags=["waterfall"])
 
@@ -20,11 +21,11 @@ async def api_waterfall_discovery(
     """
     瀑布式邮箱发现
 
-    调用链：Hunter → Tomba → 自研抓取兜底
+    调用链：Hunter → Tomba → Prospeo → 自研抓取兜底
     只有上一级无结果或结果不足时才触发下一级
 
     返回结果按综合得分排序：
-    - 来源权重：Tomba > Hunter > 自研抓取
+    - 来源权重：Tomba > Prospeo > Hunter > 自研抓取
     - 验证状态：valid > unknown
     - 职位级别：决策人 > 普通员工 > 通用邮箱
     - 置信度分数
@@ -36,9 +37,19 @@ async def api_waterfall_discovery(
     return result
 
 
+@router.get("/waterfall/prospeo-status")
+def get_prospeo_status():
+    """获取 Prospeo 功能状态（API Key 是否已配置）"""
+    configured = bool(PROSPEO_API_KEY)
+    return {
+        "configured": configured,
+        "message": "已配置" if configured else "未配置（请在环境变量设置 PROSPEO_API_KEY）",
+    }
+
+
 @router.get("/waterfall/quota-history")
 def api_waterfall_quota_history(
-    source: str = Query(None, description="筛选数据源: hunter/tomba/scraped"),
+    source: str = Query(None, description="筛选数据源: hunter/tomba/prospeo/scraped"),
     limit: int = Query(50, description="返回记录数"),
     db: Session = Depends(get_db),
 ):

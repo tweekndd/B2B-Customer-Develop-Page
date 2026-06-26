@@ -1,15 +1,17 @@
 """
-AI Trade Customer Analyzer V3.2.1 - 主程序入口
+AI Trade Customer Analyzer V3.2.2 - 主程序入口
 客户发现 + 客户分析 + 客户数据库平台
 """
 import os
 from contextlib import asynccontextmanager
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
-from app.database import init_db
+from sqlalchemy.orm import Session
+from app.database import init_db, get_db
+from app.services.cache_manager import clean_expired_cache
 from app.api import router
 
 
@@ -17,9 +19,21 @@ from app.api import router
 async def lifespan(app: FastAPI):
     """应用生命周期管理：替代已弃用的 @app.on_event"""
     init_db()
+
+    # 启动时清理过期缓存
+    try:
+        db_session = next(get_db())
+        cleaned = clean_expired_cache(db_session)
+        total = sum(cleaned.values())
+        if total > 0:
+            print(f"  缓存清理: 已删除 {total} 条过期记录 ({cleaned})")
+        db_session.close()
+    except Exception as e:
+        print(f"  缓存清理跳过: {e}")
+
     print("=" * 50)
-    print("  AI Trade Customer Analyzer V3.2.1")
-    print(" 客户发现 + AI分析 + 客户数据库 + Hunter 邮箱")
+    print("  AI Trade Customer Analyzer V3.2.2")
+    print(" 客户发现 + AI分析 + 客户数据库 + Hunter + Prospeo 邮箱")
     print("=" * 50)
     print(" 访问地址: http://localhost:8000")
     print(" 客户列表: http://localhost:8000")
@@ -33,9 +47,9 @@ async def lifespan(app: FastAPI):
 templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI(
-    title="AI Trade Customer Analyzer V3.2.1",
-    description="客户发现 + 客户分析 + 客户数据库平台 + Hunter 邮箱查找",
-    version="3.2.1",
+    title="AI Trade Customer Analyzer V3.2.2",
+    description="客户发现 + 客户分析 + 客户数据库平台 + Hunter 邮箱查找 + Prospeo 邮箱发现",
+    version="3.2.2",
     lifespan=lifespan,
 )
 
@@ -66,6 +80,14 @@ async def config_page(request: Request):
 @app.get("/hunter")
 async def hunter_page(request: Request):
     return templates.TemplateResponse("hunter.html", {"request": request, "active_nav": "hunter"})
+
+
+@app.post("/admin/cleanup-cache")
+def cleanup_cache(db: Session = Depends(get_db)):
+    """手动触发所有过期缓存清理"""
+    cleaned = clean_expired_cache(db)
+    total = sum(cleaned.values())
+    return {"message": f"已清理 {total} 条过期记录", "details": cleaned}
 
 
 if __name__ == "__main__":

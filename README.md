@@ -1,4 +1,4 @@
-# AI Trade Customer Analyzer V3.2.1
+# AI Trade Customer Analyzer V3.2.2
 
 **外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 瀑布式邮箱查找 + SSE 实时流
 
@@ -17,12 +17,12 @@
 | **关键词分析** | 14个正向 + 7个负向行业关键词命中统计 |
 | **DeepSeek AI分析** | 识别公司类型、分析原因、生成开发切入点和推荐联系职位 |
 | **规则评分引擎** | 5个维度评分：行业匹配度(30) + 项目匹配度(25) + 公司类型(20) + 国家优先级(15) + 联系方式(10) |
-| **网页配置编辑器** | 通过网页修改行业关键词、评分权重、国家优先级，保存后即时生效，无需重启 |
-| **网页配置编辑器** | 通过网页修改行业关键词、评分权重、国家优先级，保存后即时生效，无需重启 |
+| **Prospeo 邮箱发现** | 通过 Prospeo.io Search + Enrich API 查找邮箱（瀑布流第3级），返回人名+职位+LinkedIn+验证状态。Search 1积分/页，Enrich 1积分/邮箱，90天内重复免费 |
+| **Prospeo 邮箱发现** | 通过 Prospeo.io Search + Enrich API 查找邮箱（瀑布流第3级），返回人名+职位+LinkedIn+验证状态。Search 1积分/页，Enrich 1积分/邮箱，90天内重复免费 |
 | **相似客户扩展** | 输入公司网址 + 目标国家，自动搜索相似客户，支持多语言本地化搜索 |
 | **Hunter 邮箱查找** | 通过 Hunter.io API 查找公司内部联系人的工作邮箱。支持域名搜索、姓名精确查找、部门/级别筛选，含本地缓存层和额度优化策略 |
 | **Tomba 邮箱查找** | 通过 Tomba.io API 查找邮箱，返回数据更丰富（含领英、电话、部门、置信度评分）。无结果不扣费 |
-| **瀑布式邮箱发现** | 三级级联：Hunter → Tomba → 官网抓取兜底，自动按结果数量决定是否触发下一级，最大化免费额度利用率 |
+| **瀑布式邮箱发现** | 四级级联：Hunter → Tomba → Prospeo → 官网抓取兜底，自动按结果数量决定是否触发下一级，最大化免费额度利用率 |
 | **智能去重** | 域名 + 标准化公司名双重去重，自动合并重复发现的关键词 |
 | **三级缓存** | 搜索缓存(30天) + 官网缓存(7天) + AI分析缓存(内容哈希) — 避免重复消耗 API 配额 |
 | **断点续跑** | 搜索任务意外中断后，重新启动自动从断点继续 |
@@ -71,6 +71,13 @@ pip install -r requirements.txt
 - 免费套餐每月 25 次搜索 + 50 次验证
 - 无结果不扣费，同一域名 30 天内重复查询只计一次
 - 返回数据含领英链接、电话号码、部门信息、置信度评分，比 Hunter 更丰富
+
+#### Prospeo.io（瀑布式邮箱发现第三数据源，可选）
+- 前往 https://prospeo.io 注册获取 API Key
+- Search Person：1 积分/页（25 人），按 20+ 维度搜索联系人（不含邮箱，需 Enrich 补全）
+- Enrich Person：1 积分/邮箱（含个人+公司完整资料），10 积分/手机号
+- 90 天内同一人重复 Enrich 免费，无结果不扣费
+- 返回数据最丰富：姓名、职位、完整工作经历、LinkedIn、技术栈、公司收入/融资/规模
   
 ### 4. 启动系统
 
@@ -84,6 +91,7 @@ set TAVILY_API_KEY=tvly-your-tavily-api-key
 set HUNTER_API_KEY=your-hunter-api-key
 set TOMBA_API_KEY=ta-your-tomba-key
 set TOMBA_API_SECRET=ts-your-tomba-secret
+set PROSPEO_API_KEY=your-prospeo-api-key
 python main.py
 ```
 
@@ -95,6 +103,7 @@ export TAVILY_API_KEY=tvly-your-tavily-api-key
 export HUNTER_API_KEY=your-hunter-api-key
 export TOMBA_API_KEY=ta-your-tomba-key
 export TOMBA_API_SECRET=ts-your-tomba-secret
+export PROSPEO_API_KEY=your-prospeo-api-key
 python main.py
 ```
 
@@ -106,6 +115,7 @@ $env:TAVILY_API_KEY="tvly-your-tavily-api-key"
 $env:HUNTER_API_KEY="your-hunter-api-key"
 $env:TOMBA_API_KEY="ta-your-tomba-key"
 $env:TOMBA_API_SECRET="ts-your-tomba-secret"
+$env:PROSPEO_API_KEY="your-prospeo-api-key"
 python main.py
 ```
 
@@ -125,6 +135,9 @@ python main.py
 | `TOMBA_API_KEY` | — | Tomba.io API Key（瀑布式查找第二数据源） |
 | `TOMBA_API_SECRET` | — | Tomba.io API Secret（与 Key 配对使用） |
 | `TOMBA_CACHE_TTL` | `604800` (7天) | Tomba 查询结果在本地缓存的秒数 |
+| `PROSPEO_API_KEY` | — | Prospeo.io API Key（瀑布式查找第三数据源） |
+| `PROSPEO_CACHE_TTL` | `604800` (7天) | Prospeo 查询结果在本地缓存的秒数 |
+| `PROSPEO_REQUEST_DELAY` | `0.5` | Prospeo API 请求间隔秒数，避免触发速率限制 |
 | `EMAIL_DISCOVERY_MIN_RESULTS` | `2` | 瀑布式邮箱发现：结果数低于此值才触发下一级 |
 | `EMAIL_DISCOVERY_ENABLE_SCRAPING` | `true` | 瀑布式邮箱发现：是否启用官网抓取兜底 |
 
@@ -201,14 +214,14 @@ python main.py
 
 ```
 AI-Trade-Customer-Analyzer/
-├── main.py                          # FastAPI 主入口（V3.1.1）
+├── main.py                          # FastAPI 主入口（V3.2.2）
 ├── 产品评审报告-V2.7.md              # 产品评审报告
 ├── requirements.txt                 # 依赖清单
 ├── app/
-│   ├── database.py                  # 数据库模型（7张表，含 HunterCache）
+│   ├── database.py                  # 数据库模型（10张表，含 ProspeoCache）
 │   ├── database_init.py             # 数据库初始化
 │   ├── api/
-│   │   ├── __init__.py              # 路由器聚合（V3.1.1 含 Hunter/SSE 路由）
+│   │   ├── __init__.py              # 路由器聚合（V3.2.2 含 Prospeo/瀑布式路由）
 │   │   ├── routes.py                # 兼容层
 │   │   ├── customers.py             # 客户管理 API
 │   │   ├── discovery.py             # 客户发现 API
@@ -216,7 +229,7 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── config.py                # 配置管理 API
 │   │   ├── hunter.py                # Hunter 邮箱查找 API
 │   │   ├── tomba.py                 # Tomba 邮箱查找 API
-│   │   └── waterfall.py             # 瀑布式邮箱发现 API
+│   │   └── waterfall.py             # 瀑布式邮箱发现 API（含 Prospeo 状态）
 │   ├── services/
 │   │   ├── excel_importer.py        # Excel 导入
 │   │   ├── website_scraper.py       # 官网抓取（异步）
@@ -227,7 +240,7 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── scoring_engine.py        # 规则评分引擎
 │   │   ├── google_discovery.py      # SerpAPI / Tavily 搜索
 │   │   ├── search_task_service.py   # 搜索任务管理 + 断点续跑
-│   │   ├── cache_manager.py         # 三级缓存管理
+│   │   ├── cache_manager.py         # 四层缓存管理（含 Prospeo）
 │   │   ├── url_normalizer.py        # 网址标准化
 │   │   ├── company_filter.py        # 结果过滤
 │   │   ├── retry_manager.py         # 失败重试
@@ -235,6 +248,7 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── deduplication.py         # 智能去重工具
 │   │   ├── hunter_service.py        # Hunter.io API 客户端
 │   │   ├── tomba_service.py         # Tomba.io API 客户端
+│   │   ├── prospeo_service.py       # Prospeo.io API 客户端（Search+Enrich）
 │   │   ├── waterfall_discovery.py   # 瀑布式邮箱发现编排
 │   │   ├── industry_config.json     # 行业配置中心
 │   │   └── country_weights.json     # 国家权重配置
@@ -261,6 +275,7 @@ AI-Trade-Customer-Analyzer/
 | `analysis_cache` | AI 分析缓存（内容哈希比对） |
 | `hunter_cache` | Hunter 邮箱查询缓存（7天有效，自动记录命中次数） |
 | `tomba_cache` | Tomba 邮箱查询缓存（7天有效） |
+| `prospeo_cache` | Prospeo Search+Enrich 缓存（7天有效，含 person_id） |
 | `email_quota_log` | 邮箱发现配额使用日志（持久化记录各平台消耗） |
 
 ---

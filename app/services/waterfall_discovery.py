@@ -1,12 +1,13 @@
 """
-瀑布式邮箱发现服务（Phase 1 新增）
-多数据源级联查找：Hunter → Tomba → 自研抓取兜底
+瀑布式邮箱发现服务（Phase 1 新增 | V3.2.2 加入 Prospeo）
+多数据源级联查找：Hunter → Tomba → Prospeo → 自研抓取兜底
 
 核心逻辑：
 1. 先查 Hunter（已有数据源，保留为第一优先级）
 2. Hunter 无结果或数量不足 → 查 Tomba
-3. Tomba 仍无结果 → 自研官网抓取 mailto: 兜底
-4. 结果合并 → 去重 → 排序 → 输出
+3. Tomba 仍无结果或数量不足 → 查 Prospeo（Search + Enrich）
+4. Prospeo 仍无结果 → 自研官网抓取 mailto: 兜底
+5. 结果合并 → 去重 → 排序 → 输出
 """
 import os
 import re
@@ -174,7 +175,54 @@ async def _tomba_discovery(domain: str, db: Session) -> List[Dict]:
 
 
 # ═══════════════════════════════════════════
-# 第3级：自研网页抓取兜底
+# 第3级：Prospeo Search + Enrich
+# ═══════════════════════════════════════════
+
+async def _prospeo_discovery(domain: str, db: Session) -> List[Dict]:
+    """通过 Prospeo Search + Enrich 查找邮箱"""
+    from app.services.prospeo_service import ProspeoClient, PROSPEO_API_KEY
+
+    if not PROSPEO_API_KEY:
+        logger.info("[瀑布] Prospeo 未配置 API Key，跳过")
+        return []
+
+    try:
+        client = ProspeoClient(db=db)
+        enriched = client.search_and_enrich(domain=domain, limit=25)
+
+        if not enriched:
+            logger.info(f"[瀑布] Prospeo 在 {domain} 未找到邮箱")
+            return []
+
+        entries = []
+        for e in enriched:
+            # verification 状态映射到分数
+            vstatus = e.get("verification", "")
+            score_map = {"VERIFIED": 90, "ACCEPT_ALL": 65, "UNKNOWN": 45}
+            score = score_map.get(vstatus, 50)
+
+            entries.append(_make_email_entry(
+                email=e.get("email", ""),
+                source="prospeo",
+                first_name=e.get("first_name", ""),
+                last_name=e.get("last_name", ""),
+                position=e.get("position", ""),
+                phone=e.get("phone", ""),
+                linkedin=e.get("linkedin", ""),
+                score=score,
+                verification=vstatus,
+            ))
+
+        logger.info(f"[瀑布] Prospeo 在 {domain} 找到 {len(entries)} 个邮箱")
+        return entries
+
+    except Exception as e:
+        logger.warning(f"[瀑布] Prospeo 查询异常: {e}")
+        return []
+
+
+# ═══════════════════════════════════════════
+# 第4级：自研网页抓取兜底
 # ═══════════════════════════════════════════
 
 async def _scrape_discovery(domain: str) -> List[Dict]:
@@ -267,10 +315,10 @@ async def _scrape_discovery(domain: str) -> List[Dict]:
 def _merge_and_dedup(all_entries: List[List[Dict]]) -> List[Dict]:
     """
     合并多源结果，按邮箱去重
-    同一邮箱保留置信度最高的那条记录（优先级：tomba > hunter > scraped）
+    同一邮箱保留置信度最高的那条记录（优先级：tomba > prospeo > hunter > scraped）
     """
     seen = {}  # email -> entry
-    source_priority = {"tomba": 3, "hunter": 2, "scraped": 1}
+    source_priority = {"tomba": 4, "prospeo": 3, "hunter": 2, "scraped": 1}
 
     for source_entries in all_entries:
         for entry in source_entries:
@@ -301,7 +349,7 @@ def _score_and_sort(entries: List[Dict]) -> List[Dict]:
     对邮箱按综合得分排序输出
     得分维度：来源权重 + 验证状态 + 职位级别 + 置信度分数
     """
-    source_weight = {"tomba": 30, "hunter": 25, "scraped": 10}
+    source_weight = {"tomba": 30, "prospeo": 28, "hunter": 25, "scraped": 10}
     verification_weight = {"valid": 30, "unknown": 15, "": 0}
     position_keywords = {
         "ceo": 30, "cto": 30, "coo": 28, "cfo": 28, "vp": 25,
@@ -376,7 +424,7 @@ async def waterfall_email_discovery(
     """
     瀑布式邮箱发现入口
 
-    调用链：Hunter → Tomba → 自研抓取兜底
+    调用链：Hunter → Tomba → Prospeo → 自研抓取兜底
     只有上一级无结果或结果少于 MIN_RESULTS 时才触发下一级
 
     Args:
@@ -388,7 +436,7 @@ async def waterfall_email_discovery(
             "domain": "xxx",
             "total": N,
             "emails": [...],
-            "sources_used": ["hunter", "tomba"],
+            "sources_used": ["hunter", "tomba", "prospeo"],
             "waterfall_log": [...],
         }
     """
@@ -417,19 +465,33 @@ async def waterfall_email_discovery(
         if tomba_entries:
             sources_used.append("tomba")
 
-        # ── 判断是否触发第3级 ──
+        # ── 判断是否触发第3级（Prospeo）──
         total_so_far = len(hunter_entries) + len(tomba_entries)
         if total_so_far < MIN_RESULTS:
-            logger.info(f"[瀑布] 第3级 自研抓取开始 {domain} (前两级共 {total_so_far} 条)")
-            scraped_entries = await _scrape_discovery(domain)
-            all_entries.append(scraped_entries)
-            log.append({"source": "scraped", "found": len(scraped_entries), "triggered_next": False})
-            if scraped_entries:
-                sources_used.append("scraped")
+            logger.info(f"[瀑布] 第3级 Prospeo 开始查询 {domain} (前两级共 {total_so_far} 条)")
+            prospeo_entries = await _prospeo_discovery(domain, db)
+            all_entries.append(prospeo_entries)
+            log.append({"source": "prospeo", "found": len(prospeo_entries), "triggered_next": len(prospeo_entries) < MIN_RESULTS})
+            if prospeo_entries:
+                sources_used.append("prospeo")
+
+            # ── 判断是否触发第4级（自研抓取）──
+            total_so_far = len(hunter_entries) + len(tomba_entries) + len(prospeo_entries)
+            if total_so_far < MIN_RESULTS:
+                logger.info(f"[瀑布] 第4级 自研抓取开始 {domain} (前三级别共 {total_so_far} 条)")
+                scraped_entries = await _scrape_discovery(domain)
+                all_entries.append(scraped_entries)
+                log.append({"source": "scraped", "found": len(scraped_entries), "triggered_next": False})
+                if scraped_entries:
+                    sources_used.append("scraped")
+            else:
+                log.append({"source": "scraped", "found": 0, "triggered_next": False, "skipped": True})
         else:
+            log.append({"source": "prospeo", "found": 0, "triggered_next": False, "skipped": True})
             log.append({"source": "scraped", "found": 0, "triggered_next": False, "skipped": True})
     else:
         log.append({"source": "tomba", "found": 0, "triggered_next": False, "skipped": True})
+        log.append({"source": "prospeo", "found": 0, "triggered_next": False, "skipped": True})
         log.append({"source": "scraped", "found": 0, "triggered_next": False, "skipped": True})
 
     # ── 合并去重 ──

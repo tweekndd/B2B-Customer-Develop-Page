@@ -6,6 +6,7 @@
 import json
 import hashlib
 import datetime
+import os
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 from app.database import SearchCache, WebsiteCache, AnalysisCache
@@ -195,3 +196,57 @@ def save_analysis_cache(db: Session, website: str, content: str, ai_result: Dict
         db.add(cache_entry)
 
     db.commit()
+
+
+# ──── 缓存清理（V3.2.2 新增） ────
+
+def clean_expired_cache(db: Session, days_old: int = None) -> dict:
+    """
+    清理所有过期缓存记录。
+    根据各缓存表的 TTL 删除过期数据，防止数据无限堆积。
+
+    参数:
+        days_old: 可选覆盖值，删除所有早于 days_old 天的记录。
+                  不传则按各表默认 TTL 执行。
+    返回:
+        各表删除行数的字典
+    """
+    from app.database import (
+        SearchCache, WebsiteCache, AnalysisCache,
+        HunterCache, TombaCache, ProspeoCache, EmailQuotaLog,
+    )
+
+    now = datetime.datetime.utcnow()
+    counts = {}
+
+    def _delete_expired(table, date_column, ttl_days, label):
+        cutoff = now - datetime.timedelta(days=days_old if days_old is not None else ttl_days)
+        deleted = db.query(table).filter(date_column < cutoff).delete()
+        counts[label] = deleted
+
+    _delete_expired(SearchCache, SearchCache.created_at, SEARCH_CACHE_EXPIRE_DAYS, "search_cache")
+    _delete_expired(WebsiteCache, WebsiteCache.last_crawled, WEBSITE_CACHE_EXPIRE_DAYS, "website_cache")
+
+    # AI分析缓存：按 content_hash 去重，保留每个网站最新一条，删除旧版本
+    cutoff = now - datetime.timedelta(days=days_old if days_old is not None else 90)
+    # 先清理 createdAt 过期的孤立记录
+    isolated = db.query(AnalysisCache).filter(AnalysisCache.created_at < cutoff).delete()
+    counts["analysis_cache_isolated"] = isolated
+
+    # hunter_cache: 按 HUNTER_CACHE_TTL 环境变量（默认 7 天）
+    hunter_ttl = int(os.environ.get("HUNTER_CACHE_TTL", str(7 * 24 * 3600))) // 86400
+    _delete_expired(HunterCache, HunterCache.created_at, hunter_ttl, "hunter_cache")
+
+    # tomba_cache: 按 TOMBA_CACHE_TTL 环境变量（默认 7 天）
+    tomba_ttl = int(os.environ.get("TOMBA_CACHE_TTL", str(7 * 24 * 3600))) // 86400
+    _delete_expired(TombaCache, TombaCache.created_at, tomba_ttl, "tomba_cache")
+
+    # prospeo_cache: 按 PROSPEO_CACHE_TTL 环境变量（默认 7 天）
+    prospeo_ttl = int(os.environ.get("PROSPEO_CACHE_TTL", str(7 * 24 * 3600))) // 86400
+    _delete_expired(ProspeoCache, ProspeoCache.created_at, prospeo_ttl, "prospeo_cache")
+
+    # email_quota_log: 保留 90 天
+    _delete_expired(EmailQuotaLog, EmailQuotaLog.created_at, 90, "email_quota_log")
+
+    db.commit()
+    return counts

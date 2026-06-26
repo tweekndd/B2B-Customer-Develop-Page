@@ -10,6 +10,7 @@ from typing import Optional, Set
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func, case as sql_case
 
 from app.database import get_db, Customer
 from app.services.excel_importer import parse_excel, import_customers
@@ -74,12 +75,18 @@ def list_customers(
     offset_val = (page - 1) * page_size
     customers = query.offset(offset_val).limit(page_size).all()
 
-    # 统计数据合并返回
+    # 单次聚合查询替代 5 次独立 COUNT
+    agg = db.query(
+        func.count().label("total"),
+        func.sum(sql_case((Customer.analyzed_at.isnot(None), 1), else_=0)).label("analyzed"),
+        func.sum(sql_case((Customer.priority == "A", 1), else_=0)).label("grade_a"),
+        func.sum(sql_case((Customer.discovery_source == "Google", 1), else_=0)).label("google"),
+    ).first()
     stats = {
-        "total": db.query(Customer).count(),
-        "analyzed": db.query(Customer).filter(Customer.analyzed_at.isnot(None)).count(),
-        "grade_a": db.query(Customer).filter(Customer.priority == "A").count(),
-        "google": db.query(Customer).filter(Customer.discovery_source == "Google").count(),
+        "total": agg.total,
+        "analyzed": agg.analyzed or 0,
+        "grade_a": agg.grade_a or 0,
+        "google": agg.google or 0,
     }
 
     all_countries = db.query(Customer.country).distinct().filter(
@@ -436,19 +443,31 @@ def batch_delete_customers(
 
 @router.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    total = db.query(Customer).count()
-    analyzed = db.query(Customer).filter(Customer.analyzed_at.isnot(None)).count()
-    pending = total - analyzed
-    a = db.query(Customer).filter(Customer.priority == "A").count()
-    b = db.query(Customer).filter(Customer.priority == "B").count()
-    c = db.query(Customer).filter(Customer.priority == "C").count()
-    d = db.query(Customer).filter(Customer.priority == "D").count()
-    google_count = db.query(Customer).filter(Customer.discovery_source == "Google").count()
-    manual_count = db.query(Customer).filter(Customer.discovery_source.is_(None)).count()
+    agg = db.query(
+        func.count().label("total"),
+        func.sum(sql_case((Customer.analyzed_at.isnot(None), 1), else_=0)).label("analyzed"),
+        func.sum(sql_case((Customer.priority == "A", 1), else_=0)).label("a"),
+        func.sum(sql_case((Customer.priority == "B", 1), else_=0)).label("b"),
+        func.sum(sql_case((Customer.priority == "C", 1), else_=0)).label("c"),
+        func.sum(sql_case((Customer.priority == "D", 1), else_=0)).label("d"),
+        func.sum(sql_case((Customer.discovery_source == "Google", 1), else_=0)).label("google_count"),
+        func.sum(sql_case(
+            (Customer.discovery_source.is_(None), 1),
+            (Customer.discovery_source == "", 1),
+            else_=0,
+        )).label("manual_count"),
+    ).first()
     return {
-        "total": total, "analyzed": analyzed, "pending": pending,
-        "priority_distribution": {"A": a, "B": b, "C": c, "D": d},
-        "discovery_stats": {"google": google_count, "manual_import": manual_count},
+        "total": agg.total,
+        "analyzed": agg.analyzed or 0,
+        "pending": (agg.total or 0) - (agg.analyzed or 0),
+        "priority_distribution": {
+            "A": agg.a or 0, "B": agg.b or 0, "C": agg.c or 0, "D": agg.d or 0,
+        },
+        "discovery_stats": {
+            "google": agg.google_count or 0,
+            "manual_import": agg.manual_count or 0,
+        },
     }
 
 

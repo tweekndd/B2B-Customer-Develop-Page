@@ -63,6 +63,119 @@
 
 ---
 
+## v3.2.2（2026-06-26）
+
+### 🚀 Prospeo 邮箱发现 — 瀑布流第3级扩展
+
+#### 背景
+
+瀑布式邮箱发现原为三级：Hunter → Tomba → 官网抓取兜底。当 Hunter 和 Tomba 均无结果时，官网抓取 mailto: 的成功率较低。V3.2.2 引入 **Prospeo.io Search + Enrich API** 作为第3级，在 Tomba 之后、官网抓取之前插入，进一步提升邮箱发现成功率。
+
+Prospeo 的核心优势：
+- **Search Person** — 按域名/行业/职位等 20+ 维度搜索联系人（1 积分/页，25 人）
+- **Enrich Person** — 按 person_id 补全邮箱+手机号+完整 B2B 资料（1 积分/邮箱）
+- **90 天去重** — 同一人 90 天内重复 Enrich 免费
+- **无结果不扣费**
+
+#### 新的瀑布流
+
+```
+输入：公司域名
+       ↓
+[第1级] Hunter.io domain search
+       ↓ 无结果或 < 2 条
+[第2级] Tomba.io domain search（无结果不扣费）
+       ↓ 仍无结果
+[第3级] Prospeo Search + Enrich（NEW）
+       ↓ 仍无结果
+[第4级] 官网 HTML mailto: 抓取兜底
+       ↓
+结果合并 → 去重 → 评分排序（Tomba > Prospeo > Hunter > 爬取）
+```
+
+#### 新增模块
+
+##### ① Prospeo API 客户端 — `app/services/prospeo_service.py`
+
+- `ProspeoClient` 类（遵循 Hunter/Tomba 相同的模式）
+- `search_people(domain)` — Search Person API（只取第一页，最多 25 人，1 积分）
+- `enrich_person(person_id)` — Enrich Person API（逐个补全邮箱，1 积分/人）
+- `search_and_enrich(domain)` — 便捷方法：Search → Enrich 一步完成
+- 本地 SQLite 缓存层（7 天 TTL，环境变量 `PROSPEO_CACHE_TTL`）
+- 配额统计（search_person / enrich_person / cache_hits / no_result_credits_saved）
+- 请求间隔控制（0.5s，环境变量 `PROSPEO_REQUEST_DELAY`）
+
+##### ② 数据库模型 — `app/database.py`
+
+| 表 | 说明 |
+|----|------|
+| `prospeo_cache` | Prospeo 查询缓存（7 天 TTL），含 cache_key/person_id 字段 |
+
+##### ③ 瀑布流集成 — `app/services/waterfall_discovery.py`
+
+- 新增 `_prospeo_discovery()` 作为第3级
+- 去重优先级：Tomba(4) > Prospeo(3) > Hunter(2) > scraped(1)
+- 排序权重：Tomba(30) > Prospeo(28) > Hunter(25) > scraped(10)
+
+##### ④ 缓存清理 — `app/services/cache_manager.py`
+
+- 新增 `prospeo_cache` 过期清理（环境变量 `PROSPEO_CACHE_TTL`，默认 7 天）
+
+##### ⑤ API — `app/api/waterfall.py`
+
+| 接口 | 方法 | 说明 |
+|:-----|:-----|:------|
+| `/api/waterfall/prospeo-status` | GET | Prospeo 配置状态检查 |
+
+#### 配置
+
+```bash
+# Prospeo（瀑布式第三数据源）
+set PROSPEO_API_KEY=your_key_here
+```
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/services/prospeo_service.py` | **新建** — Prospeo API 客户端（Search + Enrich） |
+| `app/database.py` | 修改 — 新增 ProspeoCache 模型 + 索引 |
+| `app/services/waterfall_discovery.py` | 修改 — 插入 Prospeo 作为第3级，原第3级降为第4级 |
+| `app/services/cache_manager.py` | 修改 — 新增 prospeo_cache 清理规则 |
+| `app/api/waterfall.py` | 修改 — 新增 Prospeo 状态端点 |
+| `main.py` | 修改 — 版本号 V3.2.1 → V3.2.2 |
+
+### ⚡ 性能优化（V3.2.2 同期）
+
+#### 问题 1：关键查询字段缺失索引
+
+`list_customers` 的排序/筛选字段（country / priority / status / total_score / discovery_source / analyzed_at）无索引，大量数据时全表扫描。
+
+**修复**：Customer 模型添加 `index=True` + `_ensure_indexes()` 中 6 条 `CREATE INDEX IF NOT EXISTS` 为已有数据库补建索引。
+
+#### 问题 2：列表页每次加载执行 5 次独立 COUNT 查询
+
+`list_customers()` 和 `get_stats()` 中多次调用 `db.query().count()`，每加载一次列表页执行 4+ 次独立 COUNT。
+
+**修复**：改为单次聚合查询 `func.count()` + `func.sum(case(...))`：
+- `list_customers`：4 次 COUNT → 1 次聚合
+- `get_stats`：8 次 COUNT → 1 次聚合
+
+#### 问题 3：缓存表只写不删，数据无限堆积
+
+4 个缓存表（search_cache / website_cache / analysis_cache / hunter_cache / tomba_cache）仅有写入和 TTL 检查逻辑，但从未删除过期数据。
+
+**修复**：`clean_expired_cache()` 函数 + 启动时自动清理 + `POST /admin/cleanup-cache` 手动触发端点：
+- search_cache：30 天
+- website_cache：7 天
+- analysis_cache：90 天（孤立记录）
+- hunter_cache / tomba_cache：环境变量（默认 7 天）
+- email_quota_log：90 天
+
+**涉及文件：** `app/database.py`（索引） / `app/api/customers.py`（聚合查询） / `app/services/cache_manager.py`（清理函数） / `main.py`（启动清理 + 手动端点）
+
+---
+
 ## v3.2.1（2026-06-25）
 
 ### 🌊 Phase 1 — 瀑布式多源邮箱发现

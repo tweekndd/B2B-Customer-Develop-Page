@@ -36,7 +36,7 @@ class Customer(Base):
     country = Column(String(100), nullable=True, comment="国家")
 
     # V2.0 新增：发现来源记录
-    discovery_source = Column(String(50), nullable=True, comment="发现来源（Google / Manual Import）")
+    discovery_source = Column(String(50), nullable=True, index=True, comment="发现来源（Google / Manual Import）")
     discovery_keyword = Column(String(200), nullable=True, comment="发现时使用的关键词")
     first_found_at = Column(DateTime, nullable=True, comment="首次发现时间")
 
@@ -52,8 +52,8 @@ class Customer(Base):
     company_type_score = Column(Integer, nullable=True, comment="公司类型 0-20")
     country_score = Column(Integer, nullable=True, comment="国家优先级 0-15")
     contact_score = Column(Integer, nullable=True, comment="联系方式完整度 0-10")
-    total_score = Column(Integer, nullable=True, comment="总分 0-100")
-    priority = Column(String(1), nullable=True, comment="优先级 A/B/C/D")
+    total_score = Column(Integer, nullable=True, index=True, comment="总分 0-100")
+    priority = Column(String(1), nullable=True, index=True, comment="优先级 A/B/C/D")
 
     # AI分析字段
     company_type = Column(String(50), nullable=True, comment="AI分析的公司类型")
@@ -63,10 +63,10 @@ class Customer(Base):
     identified_projects = Column(Text, nullable=True, comment="AI识别的项目信息（JSON格式）")
     ai_raw_json = Column(Text, nullable=True, comment="AI返回的原始JSON数据")
     created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
-    analyzed_at = Column(DateTime, nullable=True, comment="分析完成时间")
+    analyzed_at = Column(DateTime, nullable=True, index=True, comment="分析完成时间")
 
     # V2.2 新增：客户跟进状态
-    status = Column(String(20), default="待联系", comment="跟进状态: 待联系/已发邮件/已回复/无效线索/成单")
+    status = Column(String(20), default="待联系", index=True, comment="跟进状态: 待联系/已发邮件/已回复/无效线索/成单")
     follow_up_date = Column(Date, nullable=True, comment="下次跟进日期")
     notes = Column(Text, nullable=True, comment="跟进备注")
 
@@ -181,6 +181,20 @@ class AnalysisCache(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="缓存时间")
 
 
+class ProspeoCache(Base):
+    """Prospeo API 查询缓存（V3.2.2 新增，避免重复消耗搜索额度）"""
+    __tablename__ = "prospeo_cache"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    cache_key = Column(String(500), nullable=False, unique=True, index=True, comment="缓存唯一键: domain|type|params")
+    domain = Column(String(255), nullable=False, index=True, comment="公司域名")
+    query_type = Column(String(30), nullable=False, comment="查询类型: search_person/enrich_person")
+    person_id = Column(String(100), nullable=True, comment="Enrich 时对应的人员 ID")
+    result = Column(Text, nullable=False, comment="API 返回结果 (JSON)")
+    hits = Column(Integer, default=1, comment="缓存命中次数（辅助统计）")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
+
+
 def get_db():
     """获取数据库会话的生成器函数"""
     db = SessionLocal()
@@ -190,9 +204,41 @@ def get_db():
         db.close()
 
 
+def _ensure_indexes(engine):
+    """确保关键查询字段存在索引（兼容已有数据库）"""
+    import sqlalchemy as sa
+    indexes = {
+        "idx_customers_country": "CREATE INDEX IF NOT EXISTS idx_customers_country ON customers(country)",
+        "idx_customers_priority": "CREATE INDEX IF NOT EXISTS idx_customers_priority ON customers(priority)",
+        "idx_customers_status": "CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status)",
+        "idx_customers_total_score": "CREATE INDEX IF NOT EXISTS idx_customers_total_score ON customers(total_score)",
+        "idx_customers_discovery_source": "CREATE INDEX IF NOT EXISTS idx_customers_discovery_source ON customers(discovery_source)",
+        "idx_customers_analyzed_at": "CREATE INDEX IF NOT EXISTS idx_customers_analyzed_at ON customers(analyzed_at)",
+        "idx_search_cache_lookup": "CREATE INDEX IF NOT EXISTS idx_search_cache_lookup ON search_cache(keyword, country, created_at)",
+        "idx_website_cache_lookup": "CREATE INDEX IF NOT EXISTS idx_website_cache_lookup ON website_cache(website, last_crawled)",
+        "idx_analysis_cache_lookup": "CREATE INDEX IF NOT EXISTS idx_analysis_cache_lookup ON analysis_cache(website, content_hash)",
+        "idx_cache_expiry_search": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_search ON search_cache(created_at)",
+        "idx_cache_expiry_website": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_website ON website_cache(last_crawled)",
+        "idx_cache_expiry_analysis": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_analysis ON analysis_cache(created_at)",
+        "idx_cache_expiry_hunter": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_hunter ON hunter_cache(created_at)",
+        "idx_cache_expiry_tomba": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_tomba ON tomba_cache(created_at)",
+        "idx_cache_expiry_quota": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_quota ON email_quota_log(created_at)",
+        "idx_cache_expiry_prospeo": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_prospeo ON prospeo_cache(created_at)",
+        "idx_prospeo_cache_domain": "CREATE INDEX IF NOT EXISTS idx_prospeo_cache_domain ON prospeo_cache(domain, query_type)",
+    }
+    with engine.connect() as conn:
+        for name, ddl in indexes.items():
+            try:
+                conn.execute(sa.text(ddl))
+            except Exception as e:
+                print(f"  索引创建跳过 {name}: {e}")
+        conn.commit()
+
+
 def init_db():
     """初始化数据库：创建所有表 + 自动迁移新增列（V2.2 支持）"""
     Base.metadata.create_all(bind=engine)
+    _ensure_indexes(engine)
 
     # ── 自动迁移：检查并添加缺失的列（SQLite 不支持 DROP COLUMN，但支持 ADD COLUMN）──
     _migrate_add_column(engine, "customers", "status", "VARCHAR(20) DEFAULT '待联系'")
