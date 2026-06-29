@@ -276,6 +276,78 @@ base.html 不再承载任何业务逻辑 JS。
 
 ---
 
+## v3.2.4（2026-06-29）
+
+### 🗺 客户地理分布地图 — 免费开源可视化
+
+#### 背景
+
+已有客户数据包含国家字段，但缺乏可视化的地理分布展示。V3.2.4 引入 **Leaflet.js + Nominatim 地理编码**，将客户国家转换为地图上的标记点，无需任何 API Key。
+
+#### 技术选型
+
+| 组件 | 选型 | 原因 |
+|------|------|------|
+| 地图引擎 | Leaflet.js 1.9.4（CDN） | 免费开源，无 API Key |
+| 标记聚合 | MarkerCluster 1.5.3 | 大量标记自动聚类 |
+| 瓦片底图 | OpenStreetMap / CartoDB dark | 日间/暗色模式自动切换 |
+| 地理编码 | Nominatim（geopy 2.4.1） | 免费，1 req/s 限速 |
+| 频率控制 | geopy RateLimiter | 内置延迟+重试 |
+
+#### 新增模块
+
+##### ① 地理编码服务 — `app/services/geocoding_service.py`
+
+- `Nominatim(user_agent="AITradeCustomerAnalyzer/3.2.4")` 全局实例
+- `RateLimiter(geocode, min_delay_seconds=1.0, max_retries=2)` 限速包装
+- `geocode_customer(db, customer)` — 单个客户地理编码（国家→经纬度）
+- `batch_geocode(db)` — 批量处理所有 pending 客户，返回统计 {total, succeeded, failed, skipped}
+- 重复保护：`geocode_status == "done"` 自动跳过
+
+##### ② 数据库扩展 — `app/database.py`
+
+Customer 模型新增三个字段（自动迁移）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `latitude` | Float | 纬度 |
+| `longitude` | Float | 经度 |
+| `geocode_status` | String(20) | pending / done / failed |
+
+##### ③ API — `app/api/geocode.py`
+
+| 接口 | 方法 | 说明 |
+|:-----|:-----|:------|
+| `/api/customers/geocode/batch` | POST | 触发批量地理编码，同步执行 |
+| `/api/customers/{id}/geocode` | POST | 单个客户地理编码 |
+| `/api/customers/map` | GET | 获取地图数据（含国家筛选+统计） |
+
+##### ④ 地图页面 — `app/templates/map.html` + `app/static/js/map.js`
+
+- 4 张统计卡片（客户总数、已定位、未定位、覆盖国家），带动画数字
+- 国家筛选下拉框，全部/单一国家切换
+- Leaflet.js 地图容器，自动适配暗色/亮色主题瓦片
+- MarkerCluster 标记聚合，自适应缩放
+- 客户弹窗信息：公司名、国家/城市、评分、状态、优先级
+- 「批量地理编码」按钮（顶栏），带加载动画和超时保护（300s）
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/services/geocoding_service.py` | **新建** — Nominatim 地理编码服务 |
+| `app/api/geocode.py` | **新建** — 地理编码 API 路由 |
+| `app/templates/map.html` | **新建** — 地图可视化页面模板 |
+| `app/static/js/map.js` | **新建** — 地图交互 JS（Leaflet + MarkerCluster） |
+| `app/database.py` | 修改 — Customer 模型 +3 字段 + 自动迁移 + 索引 |
+| `app/api/__init__.py` | 修改 — 注册 geocode 路由 |
+| `app/templates/base.html` | 修改 — 侧栏新增「地理分布」链接 + V3.2.4 |
+| `main.py` | 修改 — 新增 `/map` 路由 + V3.2.4 |
+| `requirements.txt` | 修改 — 新增 geopy>=2.4.0 |
+| `CHANGELOG.md` | 修改 — 本次更新日志 |
+
+---
+
 ## v3.2.1（2026-06-25）
 
 ### 🌊 Phase 1 — 瀑布式多源邮箱发现

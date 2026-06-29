@@ -9,3 +9,4 @@ httpx==0.28.1
 beautifulsoup4==4.12.3
 pytest==8.3.4
 # psycopg2-binary==2.9.10  # PostgreSQL 支持（可选，取消注释后安装）
+geopy>=2.4.0

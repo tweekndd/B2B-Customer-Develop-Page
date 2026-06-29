@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}客户地理分布 - AI Trade Customer Analyzer{% endblock %}
+{% block page_title %}<i class="bi bi-geo-alt-fill me-2"></i>客户地理分布{% endblock %}
+
+{% block top_bar_actions %}
+<button class="btn btn-sm btn-primary" onclick="runGeocode()" id="btnGeocode">
+    <i class="bi bi-globe2 me-1"></i>批量地理编码
+</button>
+{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- MarkerCluster CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+    /* Leaflet container loading state */
+    #mapContainer { background: var(--bg-card); }
+    .leaflet-container { font-family: var(--font-sans); }
+    .leaflet-popup-content-wrapper {
+        border-radius: 10px;
+        box-shadow: var(--shadow-md);
+    }
+    .leaflet-popup-content {
+        margin: 12px 14px;
+        font-size: 0.85rem;
+        line-height: 1.7;
+        color: var(--text-primary);
+    }
+    .leaflet-popup-content strong {
+        font-size: 0.95rem;
+        color: var(--accent-600);
+    }
+    .leaflet-popup-tip { box-shadow: none; }
+    [data-theme="dark"] .leaflet-popup-content-wrapper { background: var(--bg-card); color: var(--text-primary); }
+    [data-theme="dark"] .leaflet-popup-tip { background: var(--bg-card); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4" id="mapStats">
+    <div class="col-md-3 col-6" data-animate data-delay="100">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-buildings"></i>客户总数</div>
+                <div class="stats-number" id="totalCount">—</div>
+                <i class="bi bi-building stats-icon-bg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6" data-animate data-delay="200">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-geo-alt"></i>已定位</div>
+                <div class="stats-number" id="geocodedCount">—</div>
+                <i class="bi bi-pin-map stats-icon-bg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6" data-animate data-delay="300">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-question-circle"></i>未定位</div>
+                <div class="stats-number" id="pendingCount">—</div>
+                <i class="bi bi-pin-angle stats-icon-bg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6" data-animate data-delay="400">
+        <div class="card stats-card border-0 h-100">
+            <div class="card-body">
+                <div class="card-title"><i class="bi bi-globe"></i>覆盖国家</div>
+                <div class="stats-number" id="countryCount">—</div>
+                <i class="bi bi-globe-americas stats-icon-bg"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 筛选栏 -->
+<div class="filter-bar" data-animate>
+    <label class="form-label mb-0 me-2" for="countryFilter" style="white-space:nowrap">国家筛选：</label>
+    <select class="form-select" id="countryFilter" onchange="loadMapData()" style="flex:0 0 200px">
+        <option value="">全部国家</option>
+    </select>
+    <span id="mapStatus" class="text-muted small ms-auto"></span>
+</div>
+
+<!-- 地图容器 -->
+<div id="mapContainer" style="height: calc(100vh - 280px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);" class="fade-in"></div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- MarkerCluster JS -->
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<!-- Map page JS -->
+<script src="/static/js/map.js"></script>
+{% endblock %}

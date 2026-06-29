@@ -6,7 +6,7 @@ V2.6：支持 PostgreSQL 通过 DATABASE_URL 环境变量切换
 """
 import os
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, Float
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 数据库连接：优先使用环境变量 DATABASE_URL，否则回退到 SQLite
@@ -77,6 +77,11 @@ class Customer(Base):
 
     # V2.2 新增：客户自定义评级（1-5星，0=未评级）
     star_rating = Column(Integer, default=0, comment="客户评级: 0未评级/1-5星")
+
+    # V3.2.4 新增：Geocoding 地理编码字段
+    latitude = Column(Float, nullable=True, default=None, comment="纬度")
+    longitude = Column(Float, nullable=True, default=None, comment="经度")
+    geocode_status = Column(String(20), default="pending", comment="地理编码状态: pending/done/failed")
 
 
 class SearchTask(Base):
@@ -225,6 +230,7 @@ def _ensure_indexes(engine):
         "idx_cache_expiry_quota": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_quota ON email_quota_log(created_at)",
         "idx_cache_expiry_prospeo": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_prospeo ON prospeo_cache(created_at)",
         "idx_prospeo_cache_domain": "CREATE INDEX IF NOT EXISTS idx_prospeo_cache_domain ON prospeo_cache(domain, query_type)",
+        "idx_customers_geocode_status": "CREATE INDEX IF NOT EXISTS idx_customers_geocode_status ON customers(geocode_status)",
     }
     with engine.connect() as conn:
         for name, ddl in indexes.items():
@@ -248,6 +254,10 @@ def init_db():
     _migrate_add_column(engine, "customers", "ai_status", "VARCHAR(20)")
     _migrate_add_column(engine, "customers", "fail_reason", "VARCHAR(500)")
     _migrate_add_column(engine, "customers", "star_rating", "INTEGER DEFAULT 0")
+    # V3.2.4 新增：Geocoding 字段
+    _migrate_add_column(engine, "customers", "latitude", "FLOAT")
+    _migrate_add_column(engine, "customers", "longitude", "FLOAT")
+    _migrate_add_column(engine, "customers", "geocode_status", "VARCHAR(20) DEFAULT 'pending'")
     # 搜索任务表字段
     _migrate_add_column(engine, "search_tasks", "task_log", "TEXT")
     # Hunter 缓存表字段

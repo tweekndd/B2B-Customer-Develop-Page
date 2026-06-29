@@ -32,14 +32,15 @@ async def lifespan(app: FastAPI):
         print(f"  缓存清理跳过: {e}")
 
     print("=" * 50)
-    print("  AI Trade Customer Analyzer V3.2.3")
-    print(" 客户发现 + AI分析 + 客户数据库 + Hunter + Prospeo 邮箱")
+    print("  AI Trade Customer Analyzer V3.2.4")
+    print(" 客户发现 + AI分析 + 客户数据库 + Hunter + Prospeo 邮箱 + 地图可视化")
     print("=" * 50)
     print(" 访问地址: http://localhost:8000")
     print(" 客户列表: http://localhost:8000")
     print(" 客户发现: http://localhost:8000/discovery")
     print(" 评分配置: http://localhost:8000/config")
     print(" Hunter邮箱: http://localhost:8000/hunter")
+    print(" 地图页面:  http://localhost:8000/map")
     print("=" * 50)
     yield
 
@@ -47,9 +48,9 @@ async def lifespan(app: FastAPI):
 templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI(
-    title="AI Trade Customer Analyzer V3.2.3",
-    description="客户发现 + 客户分析 + 客户数据库平台 + Hunter 邮箱查找 + Prospeo 邮箱发现",
-    version="3.2.3",
+    title="AI Trade Customer Analyzer V3.2.4",
+    description="客户发现 + 客户分析 + 客户数据库平台 + Hunter 邮箱查找 + Prospeo 邮箱发现 + 地图可视化",
+    version="3.2.4",
     lifespan=lifespan,
 )
 
@@ -80,6 +81,11 @@ async def config_page(request: Request):
 @app.get("/hunter")
 async def hunter_page(request: Request):
     return templates.TemplateResponse("hunter.html", {"request": request, "active_nav": "hunter"})
+
+
+@app.get("/map")
+async def map_page(request: Request):
+    return templates.TemplateResponse("map.html", {"request": request, "active_nav": "map"})
 
 
 @app.post("/admin/cleanup-cache")

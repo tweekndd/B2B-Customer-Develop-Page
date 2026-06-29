@@ -37,7 +37,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <span class="brand-name">Trade Analyzer</span>
-                    <span class="brand-version">V3.2.3</span>
+                    <span class="brand-version">V3.2.4</span>
                 </div>
             </div>
 
@@ -64,6 +64,11 @@
                 <a class="sidebar-link{% if active_nav == 'config' %} active{% endif %}" href="/config" onclick="navigate(event, '/config')">
                     <i class="bi bi-sliders2"></i>
                     <span>评分配置</span>
+                </a>
+
+                <a class="sidebar-link{% if active_nav == 'map' %} active{% endif %}" href="/map" onclick="navigate(event, '/map')">
+                    <i class="bi bi-geo-alt-fill"></i>
+                    <span>地理分布</span>
                 </a>
 
                 <div class="sidebar-section-label">数据</div>
