@@ -7,9 +7,9 @@ V3.1.1 新增 SSE 端点取代轮询
 import json
 import datetime
 import asyncio
-from typing import Optional
+from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -372,3 +372,54 @@ async def api_find_similar_companies(
 
     result = await find_similar_companies(company_url, target_country, top_n=top_n)
     return result
+
+
+@router.post("/discovery/save-similar-companies")
+def save_similar_companies(
+    companies: List[dict] = Body(...),
+    db: Session = Depends(get_db),
+):
+    """
+    批量保存相似客户结果到客户列表
+    接收 [{company_name, website, country, similarity_score}, ...]
+    自动去重（域名 + 标准化公司名），已存在的跳过
+    """
+    from app.services.deduplication import find_existing_customer
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for c in companies:
+        name = (c.get("name") or c.get("company_name", "")).strip()
+        website = (c.get("website") or "").strip()
+        country = (c.get("country") or "").strip()
+
+        if not name and not website:
+            skipped += 1
+            continue
+
+        # 去重检查
+        existing = find_existing_customer(db, website, name)
+        if existing:
+            skipped += 1
+            continue
+
+        customer = Customer(
+            company_name=name or website,
+            website=website or "",
+            country=country or "",
+            discovery_source="Similar",
+            discovery_keyword="",
+            created_at=datetime.datetime.utcnow(),
+        )
+        db.add(customer)
+        imported += 1
+
+    db.commit()
+    return {
+        "message": f"成功保存 {imported} 个客户，{skipped} 个已跳过",
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors,
+    }

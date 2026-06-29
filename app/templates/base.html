@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AI Trade Customer Analyzer{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/static/css/style.css" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
@@ -13,84 +14,100 @@
     <!-- 页面过渡遮罩 -->
     <div id="pageTransition" style="
         position: fixed; inset: 0; z-index: 99999;
-        background: var(--color-slate-900);
+        background: var(--slate-950);
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.25s ease;
     "></div>
 
-    <!-- 顶部导航 -->
-    <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand d-flex align-items-center gap-2" href="/" onclick="navigate(event, '/')">
-                <i class="bi bi-graph-up-arrow fs-4"></i>
-                <span class="fw-semibold">Trade Analyzer</span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="mainNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link{% if active_nav == 'index' %} active{% endif %}" href="/" onclick="navigate(event, '/')">
-                            <i class="bi bi-people-fill me-1"></i>客户列表
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link{% if active_nav == 'discovery' %} active{% endif %}" href="/discovery" onclick="navigate(event, '/discovery')">
-                            <i class="bi bi-compass-fill me-1"></i>客户发现
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link{% if active_nav == 'config' %} active{% endif %}" href="/config" onclick="navigate(event, '/config')">
-                            <i class="bi bi-sliders2 me-1"></i>评分配置
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link{% if active_nav == 'hunter' %} active{% endif %}" href="/hunter" onclick="navigate(event, '/hunter')">
-                            <i class="bi bi-envelope-at me-1"></i>Hunter 邮箱
-                        </a>
-                    </li>
-                </ul>
-                <div class="d-flex align-items-center gap-3" id="navStats">
-                    {% block nav_stats %}{% endblock %}
+    <!-- Sidebar 遮罩（移动端） -->
+    <div id="sidebarOverlay" class="d-none d-lg-none" style="
+        position: fixed; inset: 0; z-index: 1025;
+        background: rgba(0,0,0,0.5);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    " onclick="toggleSidebar()"></div>
+
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="app-sidebar" id="appSidebar">
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-icon">
+                    <i class="bi bi-graph-up-arrow"></i>
+                </div>
+                <div class="sidebar-brand-text">
+                    <span class="brand-name">Trade Analyzer</span>
+                    <span class="brand-version">V3.2.3</span>
                 </div>
             </div>
-        </div>
-    </nav>
 
-    <!-- 主内容 -->
-    <main class="app-main" id="appMain">
-        {% block content %}{% endblock %}
-    </main>
+            <nav class="sidebar-nav">
+                <div class="sidebar-section-label">主菜单</div>
+
+                <a class="sidebar-link{% if active_nav == 'index' %} active{% endif %}" href="/" onclick="navigate(event, '/')">
+                    <i class="bi bi-people-fill"></i>
+                    <span>客户列表</span>
+                </a>
+
+                <a class="sidebar-link{% if active_nav == 'discovery' %} active{% endif %}" href="/discovery" onclick="navigate(event, '/discovery')">
+                    <i class="bi bi-compass-fill"></i>
+                    <span>客户发现</span>
+                </a>
+
+                <div class="sidebar-section-label">工具</div>
+
+                <a class="sidebar-link{% if active_nav == 'hunter' %} active{% endif %}" href="/hunter" onclick="navigate(event, '/hunter')">
+                    <i class="bi bi-envelope-at"></i>
+                    <span>Hunter 邮箱</span>
+                </a>
+
+                <a class="sidebar-link{% if active_nav == 'config' %} active{% endif %}" href="/config" onclick="navigate(event, '/config')">
+                    <i class="bi bi-sliders2"></i>
+                    <span>评分配置</span>
+                </a>
+
+                <div class="sidebar-section-label">数据</div>
+
+                <a class="sidebar-link" href="javascript:void(0)" id="navStatsLink" title="加载统计数据...">
+                    <i class="bi bi-database"></i>
+                    <span id="navStatsText">加载中...</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="theme-toggle" onclick="toggleTheme()" title="切换亮色/暗色模式">
+                    <i class="bi bi-moon-stars" id="themeIcon"></i>
+                    <span id="themeLabel">暗色模式</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="app-main">
+            <!-- 顶部栏 -->
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <button class="mobile-menu-btn" onclick="toggleSidebar()">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+                </div>
+                <div class="top-bar-right">
+                    {% block top_bar_actions %}{% endblock %}
+                </div>
+            </div>
+
+            <div class="app-main-content page-enter">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/js/app.js"></script>
-    <script>
-        // ── 页面过渡动画 ──
-        const transitionEl = document.getElementById('pageTransition');
-        const mainEl = document.getElementById('appMain');
-
-        function navigate(event, url) {
-            if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return;
-            if (window.location.pathname === url) return;
-            event.preventDefault();
-            transitionEl.style.opacity = '1';
-            setTimeout(() => { window.location.href = url; }, 200);
-        }
-
-        // 页面加载后淡入
-        document.addEventListener('DOMContentLoaded', () => {
-            if (transitionEl) {
-                transitionEl.style.opacity = '1';
-                requestAnimationFrame(() => {
-                    transitionEl.style.transition = 'opacity 0.4s ease';
-                    transitionEl.style.opacity = '0';
-                    setTimeout(() => { transitionEl.style.transition = ''; }, 500);
-                });
-            }
-        });
-    </script>
+    <script src="/static/js/utils.js"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

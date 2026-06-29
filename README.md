@@ -1,4 +1,4 @@
-# AI Trade Customer Analyzer V3.2.2
+# AI Trade Customer Analyzer V3.2.3
 
 **外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 瀑布式邮箱查找 + SSE 实时流
 
@@ -213,14 +213,14 @@ python main.py
 
 ```
 AI-Trade-Customer-Analyzer/
-├── main.py                          # FastAPI 主入口（V3.2.2）
+├── main.py                          # FastAPI 主入口（V3.2.3）
 ├── 产品评审报告-V2.7.md              # 产品评审报告
 ├── requirements.txt                 # 依赖清单
 ├── app/
 │   ├── database.py                  # 数据库模型（10张表，含 ProspeoCache）
 │   ├── database_init.py             # 数据库初始化
 │   ├── api/
-│   │   ├── __init__.py              # 路由器聚合（V3.2.2 含 Prospeo/瀑布式路由）
+│   │   ├── __init__.py              # 路由器聚合（V3.2.3 含 Prospeo/瀑布式路由）
 │   │   ├── routes.py                # 兼容层
 │   │   ├── customers.py             # 客户管理 API
 │   │   ├── discovery.py             # 客户发现 API

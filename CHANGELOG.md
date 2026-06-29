@@ -176,6 +176,106 @@ set PROSPEO_API_KEY=your_key_here
 
 ---
 
+## v3.2.3（2026-06-29）
+
+### 🏗 前端 JS 模块化重构 — 告别不可维护的内联脚本
+
+#### 背景
+
+前端模板文件累积了大量内联 JS，已逼近不可维护的临界点：
+- `detail.html` — 1127 行（含 780 行内联 JS）
+- `discovery.html` — 898 行（含 642 行内联 JS）
+- `config.html` — 639 行（含 396 行内联 JS）
+- `hunter.html` — 429 行（含 234 行内联 JS）
+- `index.html` — 466 行（含 284 行内联 JS）
+
+所有页面各自内联定义着 `_esc()`、`_fetchWithTimeout()`、`showToast()` 等工具函数，前后端 JS 逻辑完全紧耦合在 Jinja2 模板中，无法复用、无法单独测试、难以维护。
+
+#### 重构内容
+
+**① 提取工具函数，创建独立的 JS 模块体系**
+
+将 base.html 中的通用工具函数提取到 `static/js/utils.js`，包含：
+- 页面过渡动画
+- 亮/暗色主题切换 + localStorage 持久化
+- 移动端 Sidebar 切换
+- Toast 提示系统
+- 全局工具函数（`_esc`、`_num`、`_arr`、`_fmtDate`、`_gradeLabel`、`_animateNumber`、`_copyText`）
+- `_fetchWithTimeout()` 统一超时封装
+- `loadNavStats()` 导航统计
+- `[data-animate]` IntersectionObserver 滚动动画
+
+**② 按页面拆分为独立模块**
+
+| 新文件 | 来源 | 行数 | 职责 |
+|--------|------|------|------|
+| `static/js/utils.js` | base.html（新建） | 224 | 全局工具函数 & 共享行为 |
+| `static/js/index.js` | index.html（提取） | 286 | 客户列表 CRUD、批量操作、筛选分页 |
+| `static/js/detail.js` | detail.html（提取） | 782 | 客户详情渲染、AI 分析、Hunter/瀑布式邮箱查找 |
+| `static/js/discovery.js` | discovery.html（提取） | 642 | SSE 实时流、搜索任务管理、相似客户扩展 |
+| `static/js/config.js` | config.html（提取） | 398 | 评分配置编辑器（关键词/权重/类型/国家） |
+| `static/js/hunter.js` | hunter.html（提取） | 236 | Hunter 邮箱快速查找、缓存管理、配额查看 |
+
+**③ 按需加载架构**
+
+```
+base.html
+  ├── Bootstrap 5.3 (CDN)
+  ├── /static/js/utils.js      ← 共享工具函数
+  └── {% block extra_js %}     ← 每个页面只加载自己的模块
+       ├── 首页 → index.js
+       ├── 详情 → detail.js
+       ├── 发现 → discovery.js
+       ├── 配置 → config.js
+       └── Hunter → hunter.js
+```
+
+base.html 不再承载任何业务逻辑 JS。
+
+#### 效果
+
+| 指标 | 重构前 | 重构后 | 变化 |
+|------|--------|--------|------|
+| 模板总行数 | 3,856 行 | **1,341 行** | **-65%** |
+| JS 模块数 | 1 个（24 行，空壳） | **6 个**（2,568 行） | ✅ 模块化 |
+| base.html | 297 行 | **113 行** | -62% |
+| detail.html | 1,127 行 | **348 行** | -69% |
+| discovery.html | 898 行 | **257 行** | -71% |
+| config.html | 639 行 | **244 行** | -62% |
+| index.html | 466 行 | **183 行** | -61% |
+| hunter.html | 429 行 | **196 行** | -54% |
+| 每个页面加载的 JS | 全量内联 | **仅当前模块** | 按需加载 |
+
+#### 涉及的 HTML 模板
+
+| 文件 | 操作 |
+|------|------|
+| `app/templates/base.html` | 修改 — 移除 183 行内联 JS，改为加载 utils.js |
+| `app/templates/index.html` | 修改 — 移除 284 行内联 JS，改为加载 index.js |
+| `app/templates/detail.html` | 修改 — 移除 780 行内联 JS，改为加载 detail.js |
+| `app/templates/discovery.html` | 修改 — 移除 642 行内联 JS，改为加载 discovery.js |
+| `app/templates/config.html` | 修改 — 移除 396 行内联 JS，改为加载 config.js |
+| `app/templates/hunter.html` | 修改 — 移除 234 行内联 JS，改为加载 hunter.js |
+
+#### 新增的 JS 模块
+
+| 文件 | 操作 |
+|------|------|
+| `app/static/js/utils.js` | **新建** — 全局工具函数 + IntersectionObserver 滚动动画 |
+| `app/static/js/index.js` | **新建** — 客户列表页逻辑 |
+| `app/static/js/detail.js` | **新建** — 客户详情页逻辑 |
+| `app/static/js/discovery.js` | **新建** — 客户发现页逻辑 |
+| `app/static/js/config.js` | **新建** — 评分配置页逻辑 |
+| `app/static/js/hunter.js` | **新建** — Hunter 邮箱页逻辑 |
+
+#### 删除的旧文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/static/js/app.js` | **删除** — 24 行内容已合并到 utils.js |
+
+---
+
 ## v3.2.1（2026-06-25）
 
 ### 🌊 Phase 1 — 瀑布式多源邮箱发现
