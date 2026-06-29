@@ -78,6 +78,8 @@ class Customer(Base):
     # V2.2 新增：客户自定义评级（1-5星，0=未评级）
     star_rating = Column(Integer, default=0, comment="客户评级: 0未评级/1-5星")
 
+    # V3.2.5 新增：城市字段（用于地理编码定位到城市级别）
+    city = Column(String(200), nullable=True, comment="城市")
     # V3.2.4 新增：Geocoding 地理编码字段
     latitude = Column(Float, nullable=True, default=None, comment="纬度")
     longitude = Column(Float, nullable=True, default=None, comment="经度")
@@ -186,6 +188,21 @@ class AnalysisCache(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="缓存时间")
 
 
+class GeocodeCache(Base):
+    """地理编码结果缓存（V3.2.5 新增，避免重复请求 Nominatim）"""
+    __tablename__ = "geocode_cache"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    query_key = Column(String(500), nullable=False, unique=True, index=True, comment="查询键: city|Country 或 Country")
+    country = Column(String(100), nullable=True, comment="国家")
+    city = Column(String(200), nullable=True, comment="城市")
+    latitude = Column(Float, nullable=False, comment="纬度")
+    longitude = Column(Float, nullable=False, comment="经度")
+    display_name = Column(String(500), nullable=True, comment="Nominatim 返回的完整地址名")
+    hits = Column(Integer, default=1, comment="命中次数")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="缓存时间")
+
+
 class ProspeoCache(Base):
     """Prospeo API 查询缓存（V3.2.2 新增，避免重复消耗搜索额度）"""
     __tablename__ = "prospeo_cache"
@@ -231,6 +248,8 @@ def _ensure_indexes(engine):
         "idx_cache_expiry_prospeo": "CREATE INDEX IF NOT EXISTS idx_cache_expiry_prospeo ON prospeo_cache(created_at)",
         "idx_prospeo_cache_domain": "CREATE INDEX IF NOT EXISTS idx_prospeo_cache_domain ON prospeo_cache(domain, query_type)",
         "idx_customers_geocode_status": "CREATE INDEX IF NOT EXISTS idx_customers_geocode_status ON customers(geocode_status)",
+        "idx_geocode_cache_key": "CREATE INDEX IF NOT EXISTS idx_geocode_cache_key ON geocode_cache(query_key)",
+        "idx_customers_map_query": "CREATE INDEX IF NOT EXISTS idx_customers_map_query ON customers(geocode_status, country)",
     }
     with engine.connect() as conn:
         for name, ddl in indexes.items():
@@ -258,6 +277,8 @@ def init_db():
     _migrate_add_column(engine, "customers", "latitude", "FLOAT")
     _migrate_add_column(engine, "customers", "longitude", "FLOAT")
     _migrate_add_column(engine, "customers", "geocode_status", "VARCHAR(20) DEFAULT 'pending'")
+    # V3.2.5 新增：city 字段
+    _migrate_add_column(engine, "customers", "city", "VARCHAR(200)")
     # 搜索任务表字段
     _migrate_add_column(engine, "search_tasks", "task_log", "TEXT")
     # Hunter 缓存表字段

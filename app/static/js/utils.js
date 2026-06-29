@@ -204,8 +204,16 @@ async function _fetchWithTimeout(url, options, timeout) {
     timeout = timeout || 15000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
+
+    // 合并外部 signal（如 AbortController 取消请求）与内部超时 signal
+    const externalSignal = options?.signal;
+    let combinedSignal = controller.signal;
+    if (externalSignal) {
+        combinedSignal = AbortSignal.any([controller.signal, externalSignal]);
+    }
+
     try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
+        const response = await fetch(url, { ...options, signal: combinedSignal });
         clearTimeout(timer);
         if (!response.ok) {
             let detail = '';
@@ -218,7 +226,13 @@ async function _fetchWithTimeout(url, options, timeout) {
         return await response.json();
     } catch (err) {
         clearTimeout(timer);
-        if (err.name === 'AbortError') throw new Error('请求超时');
+        if (err.name === 'AbortError') {
+            // 外部 signal 取消（如用户切换筛选器）→ 保持 AbortError 原样抛出
+            if (externalSignal && externalSignal.aborted) {
+                throw err;
+            }
+            throw new Error('请求超时');
+        }
         throw err;
     }
 }

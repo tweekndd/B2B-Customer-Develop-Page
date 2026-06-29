@@ -316,6 +316,7 @@ async def _auto_analyze_and_save(
         company_name=title[:255] if title else domain,
         website=domain,
         country=country,
+        city="",  # Google 搜索结果暂无城市信息，后续可通过 AI 分析补充
         discovery_source="Google",
         discovery_keyword=discovery_keyword,
         first_found_at=now,
@@ -402,6 +403,10 @@ async def _auto_analyze_and_save(
             customer.sales_hook = ai_result.get("sales_hook", "")
             customer.target_position = ai_result.get("target_position", "")
             customer.identified_projects = ai_result.get("identified_projects", "")
+            # AI 提取城市（如果有且客户尚无 city）
+            ai_city = ai_result.get("address_city", "")
+            if ai_city and not customer.city:
+                customer.city = ai_city.strip()
             customer_info = {"country": country, "company_name": title}
             customer.ai_summary = generate_summary(ai_result, customer_info)
 

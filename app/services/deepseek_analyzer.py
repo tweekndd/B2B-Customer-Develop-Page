@@ -34,7 +34,8 @@ def _build_prompt(website_text: str) -> str:
     "sales_hook": "推荐开发切入点（中文，50字以内）",
     "target_position": "推荐联系职位（中文，如CEO / Procurement Manager / Project Manager）",
     "summary": "英文客户摘要，50字以内",
-    "identified_projects": "如果页面中有项目案例信息，请提取描述（中文，100字以内），没有则返回空字符串"
+    "identified_projects": "如果页面中有项目案例信息，请提取描述（中文，100字以内），没有则返回空字符串",
+    "address_city": "如果网页内容中包含公司地址/城市信息，提取城市名称（英文优先，如无英文可用中文），没有则返回空字符串",
 }}"""
 
     return prompt

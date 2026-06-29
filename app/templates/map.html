@@ -11,13 +11,29 @@
 {% block extra_head %}
 {{ super() }}
 <!-- Leaflet CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" />
 <!-- MarkerCluster CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha512-mQ77VzAakzdpWdgfL/lM1ksNy89uFgibRQANsNneSTMD/bj0Y/8+94XMwYhnbzx8eki2hrbPpDm0vD0CiT2lcg==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha512-6ZCLMiYwTeli2rVh3XAPxy3YoR5fVxGdH/pz+KMCzRY2M65Emgkw00Yqmhh8qLGeYQ3LbVZGdmOX9KUjSKr0TA==" crossorigin="anonymous" />
 <style>
     /* Leaflet container loading state */
-    #mapContainer { background: var(--bg-card); }
+    #mapContainer {
+        background: var(--bg-card);
+        position: relative;
+    }
+    #mapContainer.map-loading::after {
+        content: '';
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 40px; height: 40px;
+        margin: -20px 0 0 -20px;
+        border: 3px solid var(--border-color);
+        border-top-color: var(--accent-500);
+        border-radius: 50%;
+        animation: map-spin 0.8s linear infinite;
+        z-index: 999;
+    }
+    @keyframes map-spin { to { transform: rotate(360deg); } }
     .leaflet-container { font-family: var(--font-sans); }
     .leaflet-popup-content-wrapper {
         border-radius: 10px;
@@ -27,6 +43,8 @@
         margin: 12px 14px;
         font-size: 0.85rem;
         line-height: 1.7;
+        max-width: 260px;
+        word-break: break-word;
         color: var(--text-primary);
     }
     .leaflet-popup-content strong {
@@ -36,6 +54,42 @@
     .leaflet-popup-tip { box-shadow: none; }
     [data-theme="dark"] .leaflet-popup-content-wrapper { background: var(--bg-card); color: var(--text-primary); }
     [data-theme="dark"] .leaflet-popup-tip { background: var(--bg-card); }
+    /* 空状态覆盖层 */
+    .map-empty-overlay {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-card);
+        z-index: 1000;
+        pointer-events: none;
+    }
+    .map-empty-icon {
+        font-size: 3rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    .map-empty-text {
+        font-size: 1.1rem;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+    .map-empty-hint {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-top: 0.5rem;
+        opacity: 0.7;
+    }
+    /* 移动端适配 */
+    @media (max-width: 768px) {
+        #mapContainer { height: calc(100vh - 380px) !important; min-height: 300px; }
+        .filter-bar { flex-wrap: wrap; gap: 8px; }
+        .filter-bar .form-select { flex: 1 1 100% !important; }
+    }
 </style>
 {% endblock %}
 
@@ -83,7 +137,7 @@
 <!-- 筛选栏 -->
 <div class="filter-bar" data-animate>
     <label class="form-label mb-0 me-2" for="countryFilter" style="white-space:nowrap">国家筛选：</label>
-    <select class="form-select" id="countryFilter" onchange="loadMapData()" style="flex:0 0 200px">
+    <select class="form-select" id="countryFilter" onchange="loadMapDataDebounced()" style="flex:0 0 200px">
         <option value="">全部国家</option>
     </select>
     <span id="mapStatus" class="text-muted small ms-auto"></span>
@@ -96,9 +150,9 @@
 {% block extra_js %}
 {{ super() }}
 <!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous"></script>
 <!-- MarkerCluster JS -->
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha512-OFs3W4DIZ5ZkrDhBFtsCP6JXtMEDGmhl0QPlmWYBJay40TT1n3gt2Xuw8Pf/iezgW9CdabjkNChRqozl/YADmg==" crossorigin="anonymous"></script>
 <!-- Map page JS -->
 <script src="/static/js/map.js"></script>
 {% endblock %}

@@ -1,353 +1,188 @@
 # 更新日志
 
-## v3.1.2（2026-06-23）
+## v3.2.5（2026-06-29）
 
-### 🔗 Hunter × 跟进一体化 — 详情页流程闭环
+### 🧠 官网爬虫 V2 — 多阶段 URL 发现
 
-#### ① 后端新增：保存 Hunter 邮箱到客户 API
+**问题**：爬虫仅 GET 固定 11 条路径（about/contact/services），客户官网一旦使用 `contactus`、`about_us`、`our-solutions` 等变体 URL 就无法抓到内容。
 
-**新增 `POST /api/customers/{customer_id}/add-emails`：**
-- 参数 `emails`：JSON 数组字符串（要添加的邮箱列表）
-- 可选参数 `set_status`：保存后自动更新跟进状态（如 `已发邮件`）
-- 去重合并：与客户已有邮箱合并去重，不产生重复记录
-- 刷新即用：写入后即刻更新数据库，前端重新加载即可看到最新邮箱列表
+**方案**：重写 `website_scraper.py`，改为三阶段发现 + HEAD 预检：
 
-#### ② 前端重构：详情页合并「跟进 + Hunter」为统一操作区
+| 阶段 | 说明 |
+|:----|:------|
+| **阶段 1** | 先抓首页 HTML（供内容 + 链接解析） |
+| **阶段 2** | 并行执行：首页 BeautifulSoup 解析（发现 contact/about/services 链接）+ HEAD 预检 33 条扩展路径 |
+| **阶段 3** | GET 抓取所有确认存在的页面 |
+| **阶段 4** | 合并去重后返回纯文本 |
 
-**之前**——两个独立的卡片，查完邮箱不能直接保存，互不关联：
+**改进要点**：
+- **PROBE_PATHS 从 11 → 33 条**：覆盖 `contactus`、`about-us`、`contact.php`、`get-in-touch` `、`/solutions`、`/portfolio` 等更多变体
+- **智能链接发现**：解析首页 `<a>` 的 href 和文本，匹配 40 个中英文关键词，自动发现 contact/about/services 页面
+- **HEAD 预检**：对 33 条路径先发 HEAD 请求（10s 超时），仅 GET 返回 200 的页面
+- **性能控制**：`MAX_CONCURRENT=5`、`MAX_DISCOVERED_URLS=10`、`MAX_TOTAL_GETS=20`
+- **内容去重**：基于前 100 字符去重，跳转落地页内容重复自动合并
+- **保持接口兼容**：`scrape_website(website_url)` 签名未变，三个调用方无需修改
 
-```
-┌─ 跟进记录 ──┐  ┌─ Hunter 邮箱查找 ──┐
-│ 状态/日期    │  │ 姓名/部门 → 查    │
-│ 孤立操作     │  │ 结果只能复制       │
-└──────────────┘  └───────────────────┘
-```
+### 🗺 城市级地理编码增强
 
-**之后**——一个卡片 + Tab 切换，操作闭环：
+- **城市优先**：有城市时精确查询 "city, country"（Nomatim），结果写入 `GeocodeCache` 表缓存
+- **国家中心+抖动**：无城市时查询国家中心 + 后端 ±0.5° 随机抖动 + 前端 ±0.3° 抖动，同国标记在地图上分散
+- **批量任务**：`/api/customers/geocode/batch` 改为后台任务模式（`POST` → 返回 `task_id` → 轮询 `/api/customers/geocode/status/{task_id}`）
+- **前 50 条批量提交**：每 50 条 `db.commit()` 一次，大幅提升性能
+- **热点缓存**：`GeocodeCache` 表带 `UNIQUE(query_key)` + 命中计数 `hits`，常用城市查询几乎零开销
 
-```
-┌─ 邮箱查找与跟进 ────────────────────────┐
-│ [查找邮箱+标记已联系] [精确查找]         │
-│ ┌─Tab: 跟进状态 | Hunter查邮箱────────┐ │
-│ │ 跟进面板: 状态/日期/备注/评级+保存   │ │
-│ │ 快速导入: 上次Hunter结果一键保存      │ │
-│ ├─────────────────────────────────────┤ │
-│ │ Hunter面板: 域名/姓名/部门/查找      │ │
-│ │ 结果表格: 每行可复制/单存; 底部批量   │ │
-│ │ [仅保存邮箱] [保存并标记已联系]       │ │
-│ └─────────────────────────────────────┘ │
-└──────────────────────────────────────────┘
-```
+### 🐛 代码审查 Bug 修复
 
-**一键工作流：**
-1. `查找邮箱 + 标记已联系` → 自动查 Hunter → 保存邮箱 → 设状态为"已发邮件" → 刷新
-2. 查到结果后 → 可逐条保存单个邮箱，或批量保存全部
-3. 保存后自动切换到跟进面板，直接记录备注和下次跟进日期
+#### ① AbortController 取消请求无效（P0）
 
-#### ③ 周边联动
+**问题**：`map.js` 的 `currentAbortController` 从未将 `signal` 传递给 `_fetchWithTimeout`，快速切换国家筛选时前一个请求不会被取消，多个请求同时完成造成地图闪跳。
 
-- **邮箱卡片**：有网站时显示「通过 Hunter 查找」/「Hunter 查更多」按钮，指向 Hunter 面板
-- **配置状态**：卡片头实时显示 Hunter API Key 状态（✅已配置 / 🛠️测试模式 / ⚠️未配置）
-- **备注建议**：跟进备注增加 `datalist` 快速输入（已发开发信/已加 LinkedIn/已电话沟通 等）
-- **域名预填**：根据客户网址自动填充 Hunter 面板的域名
+**修改**：
+- `utils.js` — `_fetchWithTimeout` 新增外部 signal 支持（`AbortSignal.any()` 合并超时与取消）；外部取消保持 `AbortError` 原样抛出，仅超时转为"请求超时"
+- `map.js` — 传入 `{ signal: currentAbortController.signal }`
 
----
+#### ② ResizeObserver 内存泄漏（P1）
+
+**修改**：提升为模块级变量，`destroyMap()` 中调用 `.disconnect()`
+
+#### ③ 网页爬虫异常静默丢失（P1）
+
+**修改**：三个 `except Exception` 添加 `logger.warning("抓取失败: %s - %s", url, e)`
+
+#### ④ 前端死条件清理
+
+**修改**：移除 `parseFloat` 后永远不可达的 `lat === null` / `lng === null`
 
 ### 涉及文件
 
 | 文件 | 操作 |
 |------|------|
-| `app/api/customers.py` | 修改 — 新增 `POST /api/customers/{id}/add-emails` 端点 |
-| `app/templates/detail.html` | 修改 — Hunter × 跟进一体化整合 + 一键操作流程 |
-| `app/static/css/style.css` | 修改 — 新增 `.nav-tabs-sm` 小号 Tab 样式 |
+| `app/services/website_scraper.py` | **重写** — 多阶段 URL 发现（PROBE_PATHS 33 条 + 智能链接发现 + HEAD 预检） |
+| `app/services/geocoding_service.py` | 重写 — 城市级精确查询 + GeocodeCache 缓存 + 批量提交优化 |
+| `app/api/geocode.py` | 重写 — 后台任务模式（POST 返回 task_id + 轮询状态） |
+| `app/database.py` | 修改 — 新增 `Customer.city` 字段 + `GeocodeCache` 模型 |
+| `app/services/deepseek_analyzer.py` | 修改 — prompt 新增 `address_city` 提取 |
+| `app/services/excel_importer.py` | 修改 — 导入支持城市字段 |
+| `app/services/search_task_service.py` | 修改 — 分析流程保留城市字段 |
+| `app/api/customers.py` | 修改 — 列表/详情接口返回 city 字段 |
+| `app/templates/map.html` | 修改 — 城市显示 + 统计卡片 |
+| `app/static/js/map.js` | 修改 — AbortController + ResizeObserver + 死条件 + 城市信息弹窗 |
+| `app/static/js/utils.js` | 修改 — `_fetchWithTimeout` 支持外部 AbortSignal |
+| `main.py` | 修改 — 版本号 V3.2.4 → V3.2.5 |
 
 ---
-
-## v3.2.2（2026-06-26）
-
-### 🚀 Prospeo 邮箱发现 — 瀑布流第3级扩展
-
-#### 背景
-
-瀑布式邮箱发现原为三级：Hunter → Tomba → 官网抓取兜底。当 Hunter 和 Tomba 均无结果时，官网抓取 mailto: 的成功率较低。V3.2.2 引入 **Prospeo.io Search + Enrich API** 作为第3级，在 Tomba 之后、官网抓取之前插入，进一步提升邮箱发现成功率。
-
-Prospeo 的核心优势：
-- **Search Person** — 按域名/行业/职位等 20+ 维度搜索联系人（1 积分/页，25 人）
-- **Enrich Person** — 按 person_id 补全邮箱+手机号+完整 B2B 资料（1 积分/邮箱）
-- **90 天去重** — 同一人 90 天内重复 Enrich 免费
-- **无结果不扣费**
-
-#### 新的瀑布流
-
-```
-输入：公司域名
-       ↓
-[第1级] Hunter.io domain search
-       ↓ 无结果或 < 2 条
-[第2级] Tomba.io domain search（无结果不扣费）
-       ↓ 仍无结果
-[第3级] Prospeo Search + Enrich（NEW）
-       ↓ 仍无结果
-[第4级] 官网 HTML mailto: 抓取兜底
-       ↓
-结果合并 → 去重 → 评分排序（Tomba > Prospeo > Hunter > 爬取）
-```
-
-#### 新增模块
-
-##### ① Prospeo API 客户端 — `app/services/prospeo_service.py`
-
-- `ProspeoClient` 类（遵循 Hunter/Tomba 相同的模式）
-- `search_people(domain)` — Search Person API（只取第一页，最多 25 人，1 积分）
-- `enrich_person(person_id)` — Enrich Person API（逐个补全邮箱，1 积分/人）
-- `search_and_enrich(domain)` — 便捷方法：Search → Enrich 一步完成
-- 本地 SQLite 缓存层（7 天 TTL，环境变量 `PROSPEO_CACHE_TTL`）
-- 配额统计（search_person / enrich_person / cache_hits / no_result_credits_saved）
-- 请求间隔控制（0.5s，环境变量 `PROSPEO_REQUEST_DELAY`）
-
-##### ② 数据库模型 — `app/database.py`
-
-| 表 | 说明 |
-|----|------|
-| `prospeo_cache` | Prospeo 查询缓存（7 天 TTL），含 cache_key/person_id 字段 |
-
-##### ③ 瀑布流集成 — `app/services/waterfall_discovery.py`
-
-- 新增 `_prospeo_discovery()` 作为第3级
-- 去重优先级：Tomba(4) > Prospeo(3) > Hunter(2) > scraped(1)
-- 排序权重：Tomba(30) > Prospeo(28) > Hunter(25) > scraped(10)
-
-##### ④ 缓存清理 — `app/services/cache_manager.py`
-
-- 新增 `prospeo_cache` 过期清理（环境变量 `PROSPEO_CACHE_TTL`，默认 7 天）
-
-##### ⑤ API — `app/api/waterfall.py`
-
-| 接口 | 方法 | 说明 |
-|:-----|:-----|:------|
-| `/api/waterfall/prospeo-status` | GET | Prospeo 配置状态检查 |
-
-#### 配置
-
-```bash
-# Prospeo（瀑布式第三数据源）
-set PROSPEO_API_KEY=your_key_here
-```
-
-#### 涉及文件
-
-| 文件 | 操作 |
-|------|------|
-| `app/services/prospeo_service.py` | **新建** — Prospeo API 客户端（Search + Enrich） |
-| `app/database.py` | 修改 — 新增 ProspeoCache 模型 + 索引 |
-| `app/services/waterfall_discovery.py` | 修改 — 插入 Prospeo 作为第3级，原第3级降为第4级 |
-| `app/services/cache_manager.py` | 修改 — 新增 prospeo_cache 清理规则 |
-| `app/api/waterfall.py` | 修改 — 新增 Prospeo 状态端点 |
-| `main.py` | 修改 — 版本号 V3.2.1 → V3.2.2 |
-
-### ⚡ 性能优化（V3.2.2 同期）
-
-#### 问题 1：关键查询字段缺失索引
-
-`list_customers` 的排序/筛选字段（country / priority / status / total_score / discovery_source / analyzed_at）无索引，大量数据时全表扫描。
-
-**修复**：Customer 模型添加 `index=True` + `_ensure_indexes()` 中 6 条 `CREATE INDEX IF NOT EXISTS` 为已有数据库补建索引。
-
-#### 问题 2：列表页每次加载执行 5 次独立 COUNT 查询
-
-`list_customers()` 和 `get_stats()` 中多次调用 `db.query().count()`，每加载一次列表页执行 4+ 次独立 COUNT。
-
-**修复**：改为单次聚合查询 `func.count()` + `func.sum(case(...))`：
-- `list_customers`：4 次 COUNT → 1 次聚合
-- `get_stats`：8 次 COUNT → 1 次聚合
-
-#### 问题 3：缓存表只写不删，数据无限堆积
-
-4 个缓存表（search_cache / website_cache / analysis_cache / hunter_cache / tomba_cache）仅有写入和 TTL 检查逻辑，但从未删除过期数据。
-
-**修复**：`clean_expired_cache()` 函数 + 启动时自动清理 + `POST /admin/cleanup-cache` 手动触发端点：
-- search_cache：30 天
-- website_cache：7 天
-- analysis_cache：90 天（孤立记录）
-- hunter_cache / tomba_cache：环境变量（默认 7 天）
-- email_quota_log：90 天
-
-**涉及文件：** `app/database.py`（索引） / `app/api/customers.py`（聚合查询） / `app/services/cache_manager.py`（清理函数） / `main.py`（启动清理 + 手动端点）
-
----
-
-## v3.2.3（2026-06-29）
-
-### 🏗 前端 JS 模块化重构 — 告别不可维护的内联脚本
-
-#### 背景
-
-前端模板文件累积了大量内联 JS，已逼近不可维护的临界点：
-- `detail.html` — 1127 行（含 780 行内联 JS）
-- `discovery.html` — 898 行（含 642 行内联 JS）
-- `config.html` — 639 行（含 396 行内联 JS）
-- `hunter.html` — 429 行（含 234 行内联 JS）
-- `index.html` — 466 行（含 284 行内联 JS）
-
-所有页面各自内联定义着 `_esc()`、`_fetchWithTimeout()`、`showToast()` 等工具函数，前后端 JS 逻辑完全紧耦合在 Jinja2 模板中，无法复用、无法单独测试、难以维护。
-
-#### 重构内容
-
-**① 提取工具函数，创建独立的 JS 模块体系**
-
-将 base.html 中的通用工具函数提取到 `static/js/utils.js`，包含：
-- 页面过渡动画
-- 亮/暗色主题切换 + localStorage 持久化
-- 移动端 Sidebar 切换
-- Toast 提示系统
-- 全局工具函数（`_esc`、`_num`、`_arr`、`_fmtDate`、`_gradeLabel`、`_animateNumber`、`_copyText`）
-- `_fetchWithTimeout()` 统一超时封装
-- `loadNavStats()` 导航统计
-- `[data-animate]` IntersectionObserver 滚动动画
-
-**② 按页面拆分为独立模块**
-
-| 新文件 | 来源 | 行数 | 职责 |
-|--------|------|------|------|
-| `static/js/utils.js` | base.html（新建） | 224 | 全局工具函数 & 共享行为 |
-| `static/js/index.js` | index.html（提取） | 286 | 客户列表 CRUD、批量操作、筛选分页 |
-| `static/js/detail.js` | detail.html（提取） | 782 | 客户详情渲染、AI 分析、Hunter/瀑布式邮箱查找 |
-| `static/js/discovery.js` | discovery.html（提取） | 642 | SSE 实时流、搜索任务管理、相似客户扩展 |
-| `static/js/config.js` | config.html（提取） | 398 | 评分配置编辑器（关键词/权重/类型/国家） |
-| `static/js/hunter.js` | hunter.html（提取） | 236 | Hunter 邮箱快速查找、缓存管理、配额查看 |
-
-**③ 按需加载架构**
-
-```
-base.html
-  ├── Bootstrap 5.3 (CDN)
-  ├── /static/js/utils.js      ← 共享工具函数
-  └── {% block extra_js %}     ← 每个页面只加载自己的模块
-       ├── 首页 → index.js
-       ├── 详情 → detail.js
-       ├── 发现 → discovery.js
-       ├── 配置 → config.js
-       └── Hunter → hunter.js
-```
-
-base.html 不再承载任何业务逻辑 JS。
-
-#### 效果
-
-| 指标 | 重构前 | 重构后 | 变化 |
-|------|--------|--------|------|
-| 模板总行数 | 3,856 行 | **1,341 行** | **-65%** |
-| JS 模块数 | 1 个（24 行，空壳） | **6 个**（2,568 行） | ✅ 模块化 |
-| base.html | 297 行 | **113 行** | -62% |
-| detail.html | 1,127 行 | **348 行** | -69% |
-| discovery.html | 898 行 | **257 行** | -71% |
-| config.html | 639 行 | **244 行** | -62% |
-| index.html | 466 行 | **183 行** | -61% |
-| hunter.html | 429 行 | **196 行** | -54% |
-| 每个页面加载的 JS | 全量内联 | **仅当前模块** | 按需加载 |
-
-#### 涉及的 HTML 模板
-
-| 文件 | 操作 |
-|------|------|
-| `app/templates/base.html` | 修改 — 移除 183 行内联 JS，改为加载 utils.js |
-| `app/templates/index.html` | 修改 — 移除 284 行内联 JS，改为加载 index.js |
-| `app/templates/detail.html` | 修改 — 移除 780 行内联 JS，改为加载 detail.js |
-| `app/templates/discovery.html` | 修改 — 移除 642 行内联 JS，改为加载 discovery.js |
-| `app/templates/config.html` | 修改 — 移除 396 行内联 JS，改为加载 config.js |
-| `app/templates/hunter.html` | 修改 — 移除 234 行内联 JS，改为加载 hunter.js |
-
-#### 新增的 JS 模块
-
-| 文件 | 操作 |
-|------|------|
-| `app/static/js/utils.js` | **新建** — 全局工具函数 + IntersectionObserver 滚动动画 |
-| `app/static/js/index.js` | **新建** — 客户列表页逻辑 |
-| `app/static/js/detail.js` | **新建** — 客户详情页逻辑 |
-| `app/static/js/discovery.js` | **新建** — 客户发现页逻辑 |
-| `app/static/js/config.js` | **新建** — 评分配置页逻辑 |
-| `app/static/js/hunter.js` | **新建** — Hunter 邮箱页逻辑 |
-
-#### 删除的旧文件
-
-| 文件 | 操作 |
-|------|------|
-| `app/static/js/app.js` | **删除** — 24 行内容已合并到 utils.js |
-
----
-
 ## v3.2.4（2026-06-29）
 
-### 🗺 客户地理分布地图 — 免费开源可视化
+### 🗺 客户地理分布地图
 
-#### 背景
+基于 Leaflet.js（免费 CDN，无 API Key）的地图可视化：
 
-已有客户数据包含国家字段，但缺乏可视化的地理分布展示。V3.2.4 引入 **Leaflet.js + Nominatim 地理编码**，将客户国家转换为地图上的标记点，无需任何 API Key。
+- **地图引擎**：Leaflet.js + MarkerCluster（自动聚合/展开）
+- **地理编码**：Nominatim / OpenStreetMap（geopy RateLimiter 1 req/s 限速）
+- **主题适配**：暗色模式用 CartoDB dark_all 瓦片，亮色用 OSM 默认，`MutationObserver` 自动切换
+- **标记抖动**：同坐标客户自动 ±0.3° 随机分散，弹窗显示详情链接
+- **统计卡片**：客户总数 / 已定位 / 待编码 / 国家数（`animateNumber` 数字动画）
+- **国家筛选**：基于已有数据动态生成下拉框
+- **批量编码**：`POST /api/customers/geocode/batch` 一键触发全部未编码客户
+- **赤道修复**：`isNaN(lat)` 替代 `!lat`，排除 `lat=0`（赤道）被错误过滤
 
-#### 技术选型
-
-| 组件 | 选型 | 原因 |
-|------|------|------|
-| 地图引擎 | Leaflet.js 1.9.4（CDN） | 免费开源，无 API Key |
-| 标记聚合 | MarkerCluster 1.5.3 | 大量标记自动聚类 |
-| 瓦片底图 | OpenStreetMap / CartoDB dark | 日间/暗色模式自动切换 |
-| 地理编码 | Nominatim（geopy 2.4.1） | 免费，1 req/s 限速 |
-| 频率控制 | geopy RateLimiter | 内置延迟+重试 |
-
-#### 新增模块
-
-##### ① 地理编码服务 — `app/services/geocoding_service.py`
-
-- `Nominatim(user_agent="AITradeCustomerAnalyzer/3.2.4")` 全局实例
-- `RateLimiter(geocode, min_delay_seconds=1.0, max_retries=2)` 限速包装
-- `geocode_customer(db, customer)` — 单个客户地理编码（国家→经纬度）
-- `batch_geocode(db)` — 批量处理所有 pending 客户，返回统计 {total, succeeded, failed, skipped}
-- 重复保护：`geocode_status == "done"` 自动跳过
-
-##### ② 数据库扩展 — `app/database.py`
-
-Customer 模型新增三个字段（自动迁移）：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `latitude` | Float | 纬度 |
-| `longitude` | Float | 经度 |
-| `geocode_status` | String(20) | pending / done / failed |
-
-##### ③ API — `app/api/geocode.py`
-
-| 接口 | 方法 | 说明 |
-|:-----|:-----|:------|
-| `/api/customers/geocode/batch` | POST | 触发批量地理编码，同步执行 |
-| `/api/customers/{id}/geocode` | POST | 单个客户地理编码 |
-| `/api/customers/map` | GET | 获取地图数据（含国家筛选+统计） |
-
-##### ④ 地图页面 — `app/templates/map.html` + `app/static/js/map.js`
-
-- 4 张统计卡片（客户总数、已定位、未定位、覆盖国家），带动画数字
-- 国家筛选下拉框，全部/单一国家切换
-- Leaflet.js 地图容器，自动适配暗色/亮色主题瓦片
-- MarkerCluster 标记聚合，自适应缩放
-- 客户弹窗信息：公司名、国家/城市、评分、状态、优先级
-- 「批量地理编码」按钮（顶栏），带加载动画和超时保护（300s）
-
-#### 涉及文件
-
-| 文件 | 操作 |
-|------|------|
-| `app/services/geocoding_service.py` | **新建** — Nominatim 地理编码服务 |
-| `app/api/geocode.py` | **新建** — 地理编码 API 路由 |
-| `app/templates/map.html` | **新建** — 地图可视化页面模板 |
-| `app/static/js/map.js` | **新建** — 地图交互 JS（Leaflet + MarkerCluster） |
-| `app/database.py` | 修改 — Customer 模型 +3 字段 + 自动迁移 + 索引 |
-| `app/api/__init__.py` | 修改 — 注册 geocode 路由 |
-| `app/templates/base.html` | 修改 — 侧栏新增「地理分布」链接 + V3.2.4 |
-| `main.py` | 修改 — 新增 `/map` 路由 + V3.2.4 |
-| `requirements.txt` | 修改 — 新增 geopy>=2.4.0 |
-| `CHANGELOG.md` | 修改 — 本次更新日志 |
+**新增文件**：`map.html` / `map.js` / `geocoding_service.py` / `geocode.py`
 
 ---
+## v3.2.3（2026-06-29）
 
+### 🧩 前端 JS 模块化重构
+
+6 个 HTML 模板的内联 JS 全部提取为独立模块文件，模板总行数从 3,856 降至 1,341（-65%）：
+
+| 新模块 | 职责 |
+|--------|------|
+| `static/js/utils.js` | 全局工具函数（_fetchWithTimeout / _esc / 防抖 / Toast） |
+| `static/js/index.js` | 客户列表页（搜索 / 筛选 / 批量分析 / 批量删除 / 导入） |
+| `static/js/detail.js` | 客户详情页（全部交互 / 瀑布流邮箱 / 跟进） |
+| `static/js/discovery.js` | 客户发现页（任务管理 / 关键词 / 相似客户） |
+| `static/js/config.js` | 评分配置页（关键词 / 权重 / 国家编辑与保存） |
+| `static/js/hunter.js` | Hunter 邮箱页（查找 / 配额 / 缓存管理） |
+
+每个页面使用 `<script>` 按需加载自己的模块，不再加载全量 `app.js`。
+
+---
+## v3.2.2（2026-06-26）
+
+### 🚀 Prospeo 邮箱发现 — 瀑布流第 4 级扩展
+
+瀑布流从 3 级变为 **4 级**：Hunter → Tomba → Prospeo → 官网抓取兜底
+
+- 新增 `ProspeoClient`（Search Person + Enrich Person API）
+- 评分权重：Tomba(30) > Prospeo(28) > Hunter(25) > scraped(10)
+- `ProspeoCache` 模型 + 7 天缓存 TTL + 过期索引
+- `GET /api/waterfall/prospeo-status` 端点
+
+### ⚡ 数据库查询性能优化
+
+- **6 个查询字段补索引**：`country`、`priority`、`status`、`total_score`、`star_rating`、`website`
+- **`list_customers`**：5 次独立 COUNT → 1 次聚合查询
+- **`get_stats`**：8 次独立 COUNT → 1 次聚合查询
+- **`cache_manager.py`**：新增 `clean_expired_cache()` + 启动时自动清理过期缓存
+
+## v3.2.1-hotfix.1（2026-06-25）
+
+### 🔧 P0 级修复 & P1 级优化
+
+#### P0 — 关键 Bug 修复
+
+##### ① 分析失败状态未落库（#1）
+
+**问题**：`analyze_single()` 中 `scrape_website` 返回空值时直接返回空结果，
+未将失败状态写入数据库，用户无法区分「无数据」和「抓取失败」。
+
+**修改**：
+- `scrape_website` 返回空值时设置 `customer.scrape_status = "failed"` 和 `customer.fail_reason = "官网抓取失败"`
+- 返回结果新增 `has_website_text` 字段供前端状态判断
+
+##### ② `_extract_domain` 代码去重（#6）
+
+**问题**：`hunter.py`、`tomba.py`、`waterfall_discovery.py` 三处各自实现了几乎相同的 `_extract_domain` 函数，合计约 40 行冗余代码。
+
+**修改**：
+- 移除三处本地函数，统一从 `app.services.url_normalizer` 导入 `extract_domain`
+- 同时移除各自文件中的 `import re`（不再需要）
+
+##### ③ 裸 `raise e` 异常安全（#22）
+
+**问题**：`analyze_single` 的异常处理中 `except Exception as e: db.rollback(); raise e` 未包装为 HTTPException，前端收到 500 但没有错误信息。
+
+**修改**：
+- 改为 `except Exception as e: db.rollback(); raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")`
+
+#### P1 — 代码质量优化
+
+##### ④ `utcnow()` 废弃迁移（#5）
+
+**问题**：`datetime.datetime.utcnow()` 在 Python 3.12 中已废弃，全项目共 23 处使用。
+
+**修改**：
+- 全部替换为 `datetime.datetime.now(datetime.timezone.utc)`，消除时区歧义
+- 涉及 8 个文件：`customers.py`、`discovery.py`、`sync.py`、`waterfall_discovery.py`、`cache_manager.py`、`hunter_service.py`、`tomba_service.py`、`search_task_service.py`
+
+##### ⑤ `print()` → 统一日志框架（#7）
+
+**问题**：全项目 50+ 处使用 `print()` 调试输出，无日志级别、无时间戳、无法按环境控制。
+
+**修改**：
+- `main.py` 添加 `logging.basicConfig` 全局配置（INFO 级别、时间戳、模块名）
+- 所有模块替换为 `logger.info/warning/error` 调用，使用 `%s` 占位符格式化
+- 涉及 9 个文件：`main.py`、`database.py`、`database_init.py`、`discovery.py`、`google_discovery.py`、`tavily_discovery.py`、`similar_company_finder.py`、`deepseek_analyzer.py`、`keyword_expander.py`
+
+##### ⑥ README 重复行清理（#30）
+
+**问题**：README.md 第 21 行存在重复的「网页配置编辑器」条目。
+
+**修改**：
+- 移除重复行，保持文档整洁
+
+
+---
 ## v3.2.1（2026-06-25）
 
 ### 🌊 Phase 1 — 瀑布式多源邮箱发现
@@ -495,7 +330,68 @@ python main.py
 | `app/templates/discovery.html` | 修改 — 新增引擎切换 UI + JS 逻辑 |
 
 ---
+## v3.1.2（2026-06-23）
 
+### 🔗 Hunter × 跟进一体化 — 详情页流程闭环
+
+#### ① 后端新增：保存 Hunter 邮箱到客户 API
+
+**新增 `POST /api/customers/{customer_id}/add-emails`：**
+- 参数 `emails`：JSON 数组字符串（要添加的邮箱列表）
+- 可选参数 `set_status`：保存后自动更新跟进状态（如 `已发邮件`）
+- 去重合并：与客户已有邮箱合并去重，不产生重复记录
+- 刷新即用：写入后即刻更新数据库，前端重新加载即可看到最新邮箱列表
+
+#### ② 前端重构：详情页合并「跟进 + Hunter」为统一操作区
+
+**之前**——两个独立的卡片，查完邮箱不能直接保存，互不关联：
+
+```
+┌─ 跟进记录 ──┐  ┌─ Hunter 邮箱查找 ──┐
+│ 状态/日期    │  │ 姓名/部门 → 查    │
+│ 孤立操作     │  │ 结果只能复制       │
+└──────────────┘  └───────────────────┘
+```
+
+**之后**——一个卡片 + Tab 切换，操作闭环：
+
+```
+┌─ 邮箱查找与跟进 ────────────────────────┐
+│ [查找邮箱+标记已联系] [精确查找]         │
+│ ┌─Tab: 跟进状态 | Hunter查邮箱────────┐ │
+│ │ 跟进面板: 状态/日期/备注/评级+保存   │ │
+│ │ 快速导入: 上次Hunter结果一键保存      │ │
+│ ├─────────────────────────────────────┤ │
+│ │ Hunter面板: 域名/姓名/部门/查找      │ │
+│ │ 结果表格: 每行可复制/单存; 底部批量   │ │
+│ │ [仅保存邮箱] [保存并标记已联系]       │ │
+│ └─────────────────────────────────────┘ │
+└──────────────────────────────────────────┘
+```
+
+**一键工作流：**
+1. `查找邮箱 + 标记已联系` → 自动查 Hunter → 保存邮箱 → 设状态为"已发邮件" → 刷新
+2. 查到结果后 → 可逐条保存单个邮箱，或批量保存全部
+3. 保存后自动切换到跟进面板，直接记录备注和下次跟进日期
+
+#### ③ 周边联动
+
+- **邮箱卡片**：有网站时显示「通过 Hunter 查找」/「Hunter 查更多」按钮，指向 Hunter 面板
+- **配置状态**：卡片头实时显示 Hunter API Key 状态（✅已配置 / 🛠️测试模式 / ⚠️未配置）
+- **备注建议**：跟进备注增加 `datalist` 快速输入（已发开发信/已加 LinkedIn/已电话沟通 等）
+- **域名预填**：根据客户网址自动填充 Hunter 面板的域名
+
+---
+
+### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/api/customers.py` | 修改 — 新增 `POST /api/customers/{id}/add-emails` 端点 |
+| `app/templates/detail.html` | 修改 — Hunter × 跟进一体化整合 + 一键操作流程 |
+| `app/static/css/style.css` | 修改 — 新增 `.nav-tabs-sm` 小号 Tab 样式 |
+
+---
 ## v3.0.0（2026-06-23）
 
 ### 🌟 Hunter.io 邮箱查找集成 — 配额优化 & 智能缓存
@@ -583,7 +479,6 @@ export HUNTER_API_KEY=your_key_here   # Linux/Mac
 | `CHANGELOG.md` | 修改 — 本次更新日志 |
 
 ---
-
 ## v2.9.0（2026-06-22）
 
 ### 🔧 P1 级优化 — 并发安全 & 行业解耦 & 集成测试
@@ -644,7 +539,6 @@ export HUNTER_API_KEY=your_key_here   # Linux/Mac
 - 恢复 `country_weights.json` 为完整配置（含 Mexico、Qatar、US、Other）
 
 ---
-
 ## v2.8.0（2026-06-22）
 
 ### 🏗 架构重构 & 前端健壮性
@@ -741,7 +635,6 @@ export HUNTER_API_KEY=your_key_here   # Linux/Mac
 | `产品评审报告-V2.7.md` | **新增** |
 
 ---
-
 ## v2.7.1（2026-06-19）
 
 ### 🔧 业务逻辑 & 安全修复
@@ -786,7 +679,6 @@ export HUNTER_API_KEY=your_key_here   # Linux/Mac
 | `CHANGELOG.md` | 修改 — 本次更新日志 |
 
 ---
-
 ## v2.7.0（2026-06-19）
 
 ### 🔧 修复 & 优化
@@ -841,371 +733,6 @@ main.py、index.html、discovery.html 中的版本号标记分别显示 V2.0 / V
 | `CHANGELOG.md` | 修改 — 本次更新日志 |
 
 ---
-
-## v2.0.1（2026-06-06）
-
-### 🛠 修复：停止任务按钮无响应问题
-
-#### 问题描述
-
-点击发现页面的「停止任务」按钮时，页面没有任何视觉反馈，且任务不会立即停止。用户会误以为按钮失效。
-
-#### 原因分析
-
-1. **前端缺少视觉反馈**—— `stopSearchTask()` 只是默默发了 POST 请求，没有在界面上显示任何"停止信号已发送"的提示，用户感觉按钮"没反应"。
-2. **后端停止检查点不足**—— 停止信号 `_global_stop_flag` 只在 `run_search_task()` 的以下两个位置被检查：
-   - 处理每个**扩展关键词**之前
-   - 处理每个**搜索结果**之前
-
-   而每个搜索结果（公司）的完整分析流程 `_auto_analyze_and_save()` 内部——包含官网抓取、邮箱提取、关键词分析、**DeepSeek AI 分析**（最耗时，通常 30-60 秒）——完全没有检查停止标志，导致用户点击停止后仍需等待当前公司的 AI 分析完成才能生效。
-
-#### 修改内容
-
-##### 前端 — `app/templates/discovery.html`
-
-- `stopSearchTask()` 函数增加实时反馈：
-  - 点击后按钮立即置灰并显示「⏳ 正在停止...」加载动画
-  - 状态栏文字立即更新为「正在停止」
-  - 3 秒后自动刷新任务状态，以便前端及时反映后端处理结果
-  - 请求失败时弹出错误提示
-
-##### 后端 — `app/services/search_task_service.py`
-
-在 `_auto_analyze_and_save()` 内部新增**两处停止信号检查**：
-
-1. **官网爬取完成后、邮箱提取前**（第 265-270 行）
-   - 场景：爬取完成但 AI 分析还未开始
-   - 行为：保存已爬取的内容，标记公司为已分析，安全返回
-
-2. **DeepSeek AI 分析调用前**（第 288-293 行）
-   - 场景：即将进入最耗时的 AI 分析步骤
-   - 行为：跳过 AI 分析，直接保存当前已有数据（邮箱、关键词等），标记公司为已分析，安全返回
-
-同时优化了 `run_search_task()` 的主循环：
-- 在每次处理新关键词时重置任务状态为 `Running`，避免状态同步问题
-
-#### 预期效果
-
-- 点击「停止任务」后页面立即显示停止状态反馈
-- 任务在 2-3 秒内（而非 30-60 秒）停止响应
-- 已抓取但未完成 AI 分析的公司数据不会丢失，会以部分分析状态保存到数据库
-- 停止后可通过「恢复」按钮继续未完成的搜索任务（断点续跑）
-
-#### 涉及文件
-
-| 文件 | 修改类型 |
-|------|----------|
-| `app/templates/discovery.html` | 前端交互优化 |
-| `app/services/search_task_service.py` | 后端停止逻辑增强 |
-
----
-
----
-
-## v2.2.0（2026-06-12）
-
-### 新增：多语言搜索支持
-
-#### 问题描述
-
-搜索非英语国家（如 Poland、Spain）时，即使输入英文关键词+国家名，Google 搜索结果仍然以美国/英语公司为主。根本原因是：关键词是英文的，搜索参数（hl/lr/cr）也未限制到目标国家语言，导致 Google 优先返回英语世界的结果。
-
-例如：搜索 "Poland" + "wastewater treatment" → 结果全是美国公司。
-
-#### 修改方案
-
-改造整个搜索链路，使系统能根据目标国家自动使用本地语言进行搜索：
-
-1. **创建国家→语言映射表** — 覆盖 60+ 国家，精确映射每个国家的搜索语言和 Google 参数
-2. **AI 关键词扩展增加多语言支持** — 输入英文关键词，AI 一次性完成翻译+扩展，生成目标国家语言的关键词列表
-3. **SerpAPI 搜索增加国家/语言限制** — 设置 hl（界面语言）、lr（语言限制）、cr（国家限制）三个参数
-
-#### 改造后的工作流
-
-```
-输入: 国家="Poland", 关键词="wastewater treatment"
-  ↓
-AI 翻译+扩展为波兰语关键词（一次API调用）:
-["oczyszczalnia ścieków", "przetwarzanie ścieków", ...]
-  ↓
-SerpAPI 搜索:
-hl=pl, lr=lang_pl, cr=countryPL, gl=pl
-  ↓
-结果: 波兰本地企业
-```
-
-#### 新增文件
-
-| 文件 | 说明 |
-|------|------|
-| `app/services/country_language_map.py` | 国家→语言映射表（60+国家，含西班牙语、波兰语、阿拉伯语、法语、德语、俄语、日语等） |
-
-#### 修改文件
-
-| 文件 | 修改内容 |
-|------|----------|
-| `app/services/keyword_expander.py` | `expand_keywords()` 新增 `country` 参数，非英语国家自动使用本地语言扩展 |
-| `app/services/google_discovery.py` | 移除旧的 `_get_country_code()` 映射表，改用 `country_language_map`；`_fetch_via_serpapi()` 新增 hl/lr/cr 多语言参数 |
-| `app/services/search_task_service.py` | 调用 `expand_keywords` 时传入 `country` |
-| `app/api/routes.py` | 预览关键词 API 新增 `country` 参数 |
-| `app/templates/discovery.html` | 预览关键词时传入 country，结果显示语言提示 |
-
-#### 支持的语言及对应国家
-
-| 语言 | 覆盖国家 |
-|------|----------|
-| 西班牙语 | Spain、Mexico、Argentina、Chile、Colombia 等 20 个西语国家 |
-| 波兰语 | Poland |
-| 阿拉伯语 | Saudi Arabia、UAE、Qatar、Kuwait、Egypt 等 18 个阿拉伯国家 |
-| 法语 | France、Belgium、Morocco、Algeria、Tunisia 等 |
-| 德语 | Germany、Austria |
-| 意大利语 | Italy |
-| 葡萄牙语 | Portugal、Brazil、Angola、Mozambique |
-| 俄语 | Russia、Kazakhstan、Belarus 等 |
-| 日语 | Japan |
-| 韩语 | South Korea |
-| 土耳其语 | Turkey |
-| 泰语 | Thailand |
-| 越南语 | Vietnam |
-| 中文 | China、Taiwan、Hong Kong |
-| 英语（增加国家限制） | UK、Australia、Canada、India、Singapore 等（保持英文但限制国家，不再搜到美国公司） |
-
----
-
-## v2.2.1（2026-06-12）
-
-### 新增：客户跟进状态管理 & 抓取失败可视化 & 局部重试
-
-基于 V2.2 产品改进文档的两个高优先级方向，实现了 MVP 版本。
-
----
-
-#### 方向① 客户跟进状态管理
-
-**问题描述：** 系统只能「发现」和「分析」客户，但业务员无处记录跟进进度（如已发邮件、已回复、无效线索等），用完就关，没有复访动机。
-
-**改进目标：** 让系统从「一次性分析工具」升级为「持续使用的客户管理平台」。
-
-**数据层 — `app/database.py`**
-
-Customer 模型新增三个字段：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `status` | String(20) | 跟进状态枚举：待联系（默认）/ 已发邮件 / 已回复 / 无效线索 / 成单 |
-| `follow_up_date` | Date | 下次跟进日期 |
-| `notes` | Text | 跟进备注文本 |
-
-**后端 API — `app/api/routes.py`**
-
-- `list_customers` 新增 `status` 查询参数，支持按跟进状态筛选
-- 列表接口和详情接口均返回 `status` / `follow_up_date` / `notes` 字段
-- 新增 `POST /api/customers/{id}/follow-up` 接口：更新跟进状态、日期、备注
-
-**前端 — `app/templates/index.html`（客户列表页）**
-
-- 表头新增「状态」列，每行显示带色块的状态标签（待联系=灰色 / 已发邮件=蓝色 / 已回复=绿色 / 无效线索=黑色 / 成单=黄色）
-- 筛选栏新增「所有状态」下拉框，支持按状态筛选
-
-**前端 — `app/templates/detail.html`（客户详情页）**
-
-- 新增「跟进记录」卡片区，包含：跟进状态下拉 + 下次跟进日期输入 + 备注输入框 + 保存按钮
-- 保存成功后显示绿色提示「已保存」，2秒后自动消失
-
----
-
-#### 方向② 抓取失败可视化 & 局部重试
-
-**问题描述：** 分析链路（搜索→抓取→AI分析→评分）较长，每一步都可能失败，但用户看到的结果都是「空数据」——分不清到底是真的没有数据，还是中途出错。
-
-**改进目标：** 让数据状态对用户透明，支持局部重试，不需要重跑整个任务。
-
-**数据层 — `app/database.py`**
-
-Customer 模型新增三个字段：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `scrape_status` | String(20) | 官网抓取状态：success / failed / partial / skipped |
-| `ai_status` | String(20) | AI分析状态：success / failed / skipped |
-| `fail_reason` | String(500) | 失败原因描述（如超时、反爬、API错误等） |
-
-**后端分析流程写入状态 — `app/services/search_task_service.py`**
-
-`_auto_analyze_and_save()` 中：
-- 官网缓存命中 → `scrape_status=success`
-- 官网抓取成功 → `scrape_status=success`
-- 官网抓取失败 → `scrape_status=failed` + `fail_reason="官网抓取失败（网站可能无法访问或反爬）"`，标记已分析后安全返回
-- AI分析成功 → `ai_status=success`
-- AI分析失败 → `ai_status=failed` + `fail_reason="AI分析失败（API可能超时）"`
-
-**后端 API — `app/api/routes.py`**
-
-- `analyze_single` 分析过程中写入 `scrape_status` / `ai_status` / `fail_reason`
-- 列表和详情接口返回上述状态字段
-- 新增 `POST /api/customers/{id}/re-scrape`：重新抓取官网 + 重跑邮箱提取/关键词分析/评分，保留已有AI结果
-- 新增 `POST /api/customers/{id}/re-analyze`：仅重新调用DeepSeek AI分析 + 重算评分，不重新抓取
-
-**前端 — `app/templates/index.html`（客户列表页）**
-
-- 来源列后方显示抓取状态图标（✅成功 / ❌失败 / ⚠️部分）+ AI状态图标（🧠成功 / 💀失败 / ⏭️跳过）
-- 操作按钮组新增「重新抓取」和「重新AI分析」两个独立按钮（分别调用不同API）
-- 鼠标悬停在状态图标上时通过 `title` 属性显示失败原因
-
-**前端 — `app/templates/detail.html`（客户详情页）**
-
-- 操作栏增加「重新抓取」「重新AI分析」按钮
-- 基本信息区在发现来源标签旁显示状态图标（抓取成功/失败、分析成功/失败）
-
----
-
-#### 涉及文件
-
-| 文件 | 修改类型 |
-|------|----------|
-| `app/database.py` | Customer 模型新增 6 个字段（status/follow_up_date/notes/scrape_status/ai_status/fail_reason） |
-| `app/api/routes.py` | 新增 3 个接口（跟进更新/重新抓取/重新分析），列表/详情接口新增状态字段返回，支持 status 筛选 |
-| `app/services/search_task_service.py` | `_auto_analyze_and_save` 中写入 scrape_status/ai_status/fail_reason |
-| `app/templates/index.html` | 新增状态列+状态筛选+状态图标+重新抓取/重新分析按钮 |
-| `app/templates/detail.html` | 新增跟进记录区+状态图标+重新抓取/重新分析按钮 |
-
----
-
-## v2.2.2（2026-06-12）
-
-### 新增：客户评级、多字段搜索、数据库自动迁移
-
-#### ① 客户自定义评级（重要性标记）
-
-**问题描述：** 用户可以标记跟进状态，但缺乏一个独立于 AI 评分的「自定义重要性」标记。业务员想结合自己的判断给客户打星，区分哪些是自己认为重要的客户。
-
-**改进内容：**
-
-| 层面 | 修改 |
-|------|------|
-| **数据层** `database.py` | Customer 模型新增 `star_rating` 字段（Integer, 0=未评级, 1-5星），`init_db` 自动迁移添加该列 |
-| **API** `routes.py` | 列表/详情接口返回 `star_rating`；`follow-up` 接口新增 `star_rating` 参数，保存时一并提交 |
-| **列表页** `index.html` | 表头新增「评级」列，每行显示 ⭐ 星星图标（实心=已评级，空心=未评级） |
-| **详情页** `detail.html` | 跟进记录区新增「客户评级」下拉（未评级 / 1星 ~ 5星） |
-
-#### ② 多字段搜索增强
-
-**问题描述：** 搜索框只能搜公司名，输入网址或邮箱找不到任何结果。
-
-**改进内容：**
-
-`app/api/routes.py` — `list_customers` 接口的搜索逻辑从仅匹配 `company_name` 改为 `OR` 匹配三个字段：
-- `company_name`（公司名称）
-- `website`（官网网址）
-- `emails`（邮箱内容，JSON字符串模糊匹配）
-
-现在输入公司名、网址片段或邮箱都能搜到对应的客户。
-
-#### ③ 数据库自动迁移（Bug修复）
-
-**问题描述：** v2.2.1 新增了 6 个字段后，已有的 `customers.db` 文件不会自动加列，运行时报错 `no such column: customers.status`。
-
-**改进内容：**
-
-`app/database.py` — `init_db()` 新增 `_migrate_add_column()` 函数，每次启动时检查 `customers` 表的实际列清单，发现缺失的列自动执行 `ALTER TABLE ADD COLUMN`。支持的自动迁移列：
-- `status`、`follow_up_date`、`notes`
-- `scrape_status`、`ai_status`、`fail_reason`
-- `star_rating`
-
-重启即可自动补齐缺失列，无需手动操作数据库。
-
----
-
-#### 涉及文件
-
-| 文件 | 修改内容 |
-|------|----------|
-| `app/database.py` | 新增 `star_rating` 字段；`init_db()` 新增自动迁移逻辑 `_migrate_add_column()` |
-| `app/api/routes.py` | 搜索改为多字段 OR（公司名/网址/邮箱）；列表/详情返回 `star_rating`；follow-up 接口支持 `star_rating` 参数 |
-| `app/templates/index.html` | 表头新增「评级」列，渲染 ⭐ 星星图标 |
-| `app/templates/detail.html` | 跟进记录区新增客户评级下拉；saveFollowUp 提交 `star_rating` |
-
----
-
-## v2.2.3（2026-06-12）
-
-### 新增：Tavily 搜索引擎支持
-
-支持 Tavily API 作为 Google 搜索替代后端，通过环境变量动态切换。
-
-**新增文件：**
-
-| 文件 | 说明 |
-|------|------|
-| `app/services/tavily_discovery.py` | Tavily 搜索客户端，调用 `POST /search` 接口，支持分页去重 |
-
-**修改文件：**
-
-| 文件 | 修改内容 |
-|------|----------|
-| `app/services/google_discovery.py` | 重构为统一入口：`search_google()` 根据 `SEARCH_ENGINE` 环境变量或自动检测选择 SerpAPI / Tavily 实现；原有 SerpAPI 逻辑保留为内部函数 |
-| `README.md` | 环境变量表新增 `TAVILY_API_KEY` 和 `SEARCH_ENGINE`，增加搜索引擎选择说明 |
-
-**切换方式（三种）：**
-
-```bash
-# 1. 自动检测（优先 Tavily）
-set TAVILY_API_KEY=tvly-your-key
-
-# 2. 强制指定
-set SEARCH_ENGINE=tavily
-set TAVILY_API_KEY=tvly-your-key
-
-# 3. 使用 SerpAPI（默认）
-set SEARCH_ENGINE=serpapi
-set SERPAPI_API_KEY=your-key
-```
-
----
-
-## v2.5.0（2026-06-16）
-
-### 新增：相似客户扩展（种子客户扩展）
-
-基于公司网址的相似客户扩展模块（V1简化版）。用户输入一个目标公司网址后，系统自动分析该公司业务内容，并在指定国家范围内搜索相似公司。
-
-#### 工作流程
-
-```
-输入: https://example-water.com + Mexico
-  ↓
-抓取官网 → LLM提取行业/产品/关键词
-  ↓
-生成搜索组合（industry+country, product+country, keyword+companies+country）
-  ↓
-搜索引擎并发查询 → 去重过滤 → 规则相似度评分
-  ↓
-输出 Top 50 相似客户（含相似度评分）
-```
-
-#### 相似度评分规则
-
-| 维度 | 权重 | 说明 |
-|------|------|------|
-| 关键词匹配 | 60% | 种子公司关键词在搜索结果标题/摘要中的命中率 |
-| 行业一致性 | 30% | 行业词在搜索结果中的匹配度 |
-| 内容相似度 | 10% | 是否含 company/service/supplier 等企业标识词 |
-
-#### 新增文件
-
-| 文件 | 说明 |
-|------|------|
-| `app/services/similar_company_finder.py` | 核心服务：官网抓取→LLM提取→搜索→评分→排序，完整串联5个步骤 |
-
-#### 修改文件
-
-| 文件 | 修改内容 |
-|------|----------|
-| `app/api/routes.py` | 新增 `POST /api/discovery/similar-companies` 接口 |
-| `app/templates/discovery.html` | 新增「相似客户扩展」卡片（输入框+进度条+结果表格+种子信息展示） |
-
----
-
 ## v2.6.0（2026-06-19）
 
 ### 三大改进 + 数据同步
@@ -1313,6 +840,362 @@ python3 main.py
 | `tests/` | **新增** — 7个文件，129个测试 |
 | `sync.sh` | **新增** — 一键同步脚本 |
 | `CHANGELOG.md` | 修改 — 本次更新日志 |
+
+---
+## v2.5.0（2026-06-16）
+
+### 新增：相似客户扩展（种子客户扩展）
+
+基于公司网址的相似客户扩展模块（V1简化版）。用户输入一个目标公司网址后，系统自动分析该公司业务内容，并在指定国家范围内搜索相似公司。
+
+#### 工作流程
+
+```
+输入: https://example-water.com + Mexico
+  ↓
+抓取官网 → LLM提取行业/产品/关键词
+  ↓
+生成搜索组合（industry+country, product+country, keyword+companies+country）
+  ↓
+搜索引擎并发查询 → 去重过滤 → 规则相似度评分
+  ↓
+输出 Top 50 相似客户（含相似度评分）
+```
+
+#### 相似度评分规则
+
+| 维度 | 权重 | 说明 |
+|------|------|------|
+| 关键词匹配 | 60% | 种子公司关键词在搜索结果标题/摘要中的命中率 |
+| 行业一致性 | 30% | 行业词在搜索结果中的匹配度 |
+| 内容相似度 | 10% | 是否含 company/service/supplier 等企业标识词 |
+
+#### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `app/services/similar_company_finder.py` | 核心服务：官网抓取→LLM提取→搜索→评分→排序，完整串联5个步骤 |
+
+#### 修改文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `app/api/routes.py` | 新增 `POST /api/discovery/similar-companies` 接口 |
+| `app/templates/discovery.html` | 新增「相似客户扩展」卡片（输入框+进度条+结果表格+种子信息展示） |
+
+---
+## v2.2.3（2026-06-12）
+
+### 新增：Tavily 搜索引擎支持
+
+支持 Tavily API 作为 Google 搜索替代后端，通过环境变量动态切换。
+
+**新增文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `app/services/tavily_discovery.py` | Tavily 搜索客户端，调用 `POST /search` 接口，支持分页去重 |
+
+**修改文件：**
+
+| 文件 | 修改内容 |
+|------|----------|
+| `app/services/google_discovery.py` | 重构为统一入口：`search_google()` 根据 `SEARCH_ENGINE` 环境变量或自动检测选择 SerpAPI / Tavily 实现；原有 SerpAPI 逻辑保留为内部函数 |
+| `README.md` | 环境变量表新增 `TAVILY_API_KEY` 和 `SEARCH_ENGINE`，增加搜索引擎选择说明 |
+
+**切换方式（三种）：**
+
+```bash
+# 1. 自动检测（优先 Tavily）
+set TAVILY_API_KEY=tvly-your-key
+
+# 2. 强制指定
+set SEARCH_ENGINE=tavily
+set TAVILY_API_KEY=tvly-your-key
+
+# 3. 使用 SerpAPI（默认）
+set SEARCH_ENGINE=serpapi
+set SERPAPI_API_KEY=your-key
+```
+
+---
+## v2.2.2（2026-06-12）
+
+### 新增：客户评级、多字段搜索、数据库自动迁移
+
+#### ① 客户自定义评级（重要性标记）
+
+**问题描述：** 用户可以标记跟进状态，但缺乏一个独立于 AI 评分的「自定义重要性」标记。业务员想结合自己的判断给客户打星，区分哪些是自己认为重要的客户。
+
+**改进内容：**
+
+| 层面 | 修改 |
+|------|------|
+| **数据层** `database.py` | Customer 模型新增 `star_rating` 字段（Integer, 0=未评级, 1-5星），`init_db` 自动迁移添加该列 |
+| **API** `routes.py` | 列表/详情接口返回 `star_rating`；`follow-up` 接口新增 `star_rating` 参数，保存时一并提交 |
+| **列表页** `index.html` | 表头新增「评级」列，每行显示 ⭐ 星星图标（实心=已评级，空心=未评级） |
+| **详情页** `detail.html` | 跟进记录区新增「客户评级」下拉（未评级 / 1星 ~ 5星） |
+
+#### ② 多字段搜索增强
+
+**问题描述：** 搜索框只能搜公司名，输入网址或邮箱找不到任何结果。
+
+**改进内容：**
+
+`app/api/routes.py` — `list_customers` 接口的搜索逻辑从仅匹配 `company_name` 改为 `OR` 匹配三个字段：
+- `company_name`（公司名称）
+- `website`（官网网址）
+- `emails`（邮箱内容，JSON字符串模糊匹配）
+
+现在输入公司名、网址片段或邮箱都能搜到对应的客户。
+
+#### ③ 数据库自动迁移（Bug修复）
+
+**问题描述：** v2.2.1 新增了 6 个字段后，已有的 `customers.db` 文件不会自动加列，运行时报错 `no such column: customers.status`。
+
+**改进内容：**
+
+`app/database.py` — `init_db()` 新增 `_migrate_add_column()` 函数，每次启动时检查 `customers` 表的实际列清单，发现缺失的列自动执行 `ALTER TABLE ADD COLUMN`。支持的自动迁移列：
+- `status`、`follow_up_date`、`notes`
+- `scrape_status`、`ai_status`、`fail_reason`
+- `star_rating`
+
+重启即可自动补齐缺失列，无需手动操作数据库。
+
+---
+
+#### 涉及文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `app/database.py` | 新增 `star_rating` 字段；`init_db()` 新增自动迁移逻辑 `_migrate_add_column()` |
+| `app/api/routes.py` | 搜索改为多字段 OR（公司名/网址/邮箱）；列表/详情返回 `star_rating`；follow-up 接口支持 `star_rating` 参数 |
+| `app/templates/index.html` | 表头新增「评级」列，渲染 ⭐ 星星图标 |
+| `app/templates/detail.html` | 跟进记录区新增客户评级下拉；saveFollowUp 提交 `star_rating` |
+
+---
+## v2.2.1（2026-06-12）
+
+### 新增：客户跟进状态管理 & 抓取失败可视化 & 局部重试
+
+基于 V2.2 产品改进文档的两个高优先级方向，实现了 MVP 版本。
+
+---
+
+#### 方向① 客户跟进状态管理
+
+**问题描述：** 系统只能「发现」和「分析」客户，但业务员无处记录跟进进度（如已发邮件、已回复、无效线索等），用完就关，没有复访动机。
+
+**改进目标：** 让系统从「一次性分析工具」升级为「持续使用的客户管理平台」。
+
+**数据层 — `app/database.py`**
+
+Customer 模型新增三个字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `status` | String(20) | 跟进状态枚举：待联系（默认）/ 已发邮件 / 已回复 / 无效线索 / 成单 |
+| `follow_up_date` | Date | 下次跟进日期 |
+| `notes` | Text | 跟进备注文本 |
+
+**后端 API — `app/api/routes.py`**
+
+- `list_customers` 新增 `status` 查询参数，支持按跟进状态筛选
+- 列表接口和详情接口均返回 `status` / `follow_up_date` / `notes` 字段
+- 新增 `POST /api/customers/{id}/follow-up` 接口：更新跟进状态、日期、备注
+
+**前端 — `app/templates/index.html`（客户列表页）**
+
+- 表头新增「状态」列，每行显示带色块的状态标签（待联系=灰色 / 已发邮件=蓝色 / 已回复=绿色 / 无效线索=黑色 / 成单=黄色）
+- 筛选栏新增「所有状态」下拉框，支持按状态筛选
+
+**前端 — `app/templates/detail.html`（客户详情页）**
+
+- 新增「跟进记录」卡片区，包含：跟进状态下拉 + 下次跟进日期输入 + 备注输入框 + 保存按钮
+- 保存成功后显示绿色提示「已保存」，2秒后自动消失
+
+---
+
+#### 方向② 抓取失败可视化 & 局部重试
+
+**问题描述：** 分析链路（搜索→抓取→AI分析→评分）较长，每一步都可能失败，但用户看到的结果都是「空数据」——分不清到底是真的没有数据，还是中途出错。
+
+**改进目标：** 让数据状态对用户透明，支持局部重试，不需要重跑整个任务。
+
+**数据层 — `app/database.py`**
+
+Customer 模型新增三个字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `scrape_status` | String(20) | 官网抓取状态：success / failed / partial / skipped |
+| `ai_status` | String(20) | AI分析状态：success / failed / skipped |
+| `fail_reason` | String(500) | 失败原因描述（如超时、反爬、API错误等） |
+
+**后端分析流程写入状态 — `app/services/search_task_service.py`**
+
+`_auto_analyze_and_save()` 中：
+- 官网缓存命中 → `scrape_status=success`
+- 官网抓取成功 → `scrape_status=success`
+- 官网抓取失败 → `scrape_status=failed` + `fail_reason="官网抓取失败（网站可能无法访问或反爬）"`，标记已分析后安全返回
+- AI分析成功 → `ai_status=success`
+- AI分析失败 → `ai_status=failed` + `fail_reason="AI分析失败（API可能超时）"`
+
+**后端 API — `app/api/routes.py`**
+
+- `analyze_single` 分析过程中写入 `scrape_status` / `ai_status` / `fail_reason`
+- 列表和详情接口返回上述状态字段
+- 新增 `POST /api/customers/{id}/re-scrape`：重新抓取官网 + 重跑邮箱提取/关键词分析/评分，保留已有AI结果
+- 新增 `POST /api/customers/{id}/re-analyze`：仅重新调用DeepSeek AI分析 + 重算评分，不重新抓取
+
+**前端 — `app/templates/index.html`（客户列表页）**
+
+- 来源列后方显示抓取状态图标（✅成功 / ❌失败 / ⚠️部分）+ AI状态图标（🧠成功 / 💀失败 / ⏭️跳过）
+- 操作按钮组新增「重新抓取」和「重新AI分析」两个独立按钮（分别调用不同API）
+- 鼠标悬停在状态图标上时通过 `title` 属性显示失败原因
+
+**前端 — `app/templates/detail.html`（客户详情页）**
+
+- 操作栏增加「重新抓取」「重新AI分析」按钮
+- 基本信息区在发现来源标签旁显示状态图标（抓取成功/失败、分析成功/失败）
+
+---
+
+#### 涉及文件
+
+| 文件 | 修改类型 |
+|------|----------|
+| `app/database.py` | Customer 模型新增 6 个字段（status/follow_up_date/notes/scrape_status/ai_status/fail_reason） |
+| `app/api/routes.py` | 新增 3 个接口（跟进更新/重新抓取/重新分析），列表/详情接口新增状态字段返回，支持 status 筛选 |
+| `app/services/search_task_service.py` | `_auto_analyze_and_save` 中写入 scrape_status/ai_status/fail_reason |
+| `app/templates/index.html` | 新增状态列+状态筛选+状态图标+重新抓取/重新分析按钮 |
+| `app/templates/detail.html` | 新增跟进记录区+状态图标+重新抓取/重新分析按钮 |
+
+---
+## v2.2.0（2026-06-12）
+
+### 新增：多语言搜索支持
+
+#### 问题描述
+
+搜索非英语国家（如 Poland、Spain）时，即使输入英文关键词+国家名，Google 搜索结果仍然以美国/英语公司为主。根本原因是：关键词是英文的，搜索参数（hl/lr/cr）也未限制到目标国家语言，导致 Google 优先返回英语世界的结果。
+
+例如：搜索 "Poland" + "wastewater treatment" → 结果全是美国公司。
+
+#### 修改方案
+
+改造整个搜索链路，使系统能根据目标国家自动使用本地语言进行搜索：
+
+1. **创建国家→语言映射表** — 覆盖 60+ 国家，精确映射每个国家的搜索语言和 Google 参数
+2. **AI 关键词扩展增加多语言支持** — 输入英文关键词，AI 一次性完成翻译+扩展，生成目标国家语言的关键词列表
+3. **SerpAPI 搜索增加国家/语言限制** — 设置 hl（界面语言）、lr（语言限制）、cr（国家限制）三个参数
+
+#### 改造后的工作流
+
+```
+输入: 国家="Poland", 关键词="wastewater treatment"
+  ↓
+AI 翻译+扩展为波兰语关键词（一次API调用）:
+["oczyszczalnia ścieków", "przetwarzanie ścieków", ...]
+  ↓
+SerpAPI 搜索:
+hl=pl, lr=lang_pl, cr=countryPL, gl=pl
+  ↓
+结果: 波兰本地企业
+```
+
+#### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `app/services/country_language_map.py` | 国家→语言映射表（60+国家，含西班牙语、波兰语、阿拉伯语、法语、德语、俄语、日语等） |
+
+#### 修改文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `app/services/keyword_expander.py` | `expand_keywords()` 新增 `country` 参数，非英语国家自动使用本地语言扩展 |
+| `app/services/google_discovery.py` | 移除旧的 `_get_country_code()` 映射表，改用 `country_language_map`；`_fetch_via_serpapi()` 新增 hl/lr/cr 多语言参数 |
+| `app/services/search_task_service.py` | 调用 `expand_keywords` 时传入 `country` |
+| `app/api/routes.py` | 预览关键词 API 新增 `country` 参数 |
+| `app/templates/discovery.html` | 预览关键词时传入 country，结果显示语言提示 |
+
+#### 支持的语言及对应国家
+
+| 语言 | 覆盖国家 |
+|------|----------|
+| 西班牙语 | Spain、Mexico、Argentina、Chile、Colombia 等 20 个西语国家 |
+| 波兰语 | Poland |
+| 阿拉伯语 | Saudi Arabia、UAE、Qatar、Kuwait、Egypt 等 18 个阿拉伯国家 |
+| 法语 | France、Belgium、Morocco、Algeria、Tunisia 等 |
+| 德语 | Germany、Austria |
+| 意大利语 | Italy |
+| 葡萄牙语 | Portugal、Brazil、Angola、Mozambique |
+| 俄语 | Russia、Kazakhstan、Belarus 等 |
+| 日语 | Japan |
+| 韩语 | South Korea |
+| 土耳其语 | Turkey |
+| 泰语 | Thailand |
+| 越南语 | Vietnam |
+| 中文 | China、Taiwan、Hong Kong |
+| 英语（增加国家限制） | UK、Australia、Canada、India、Singapore 等（保持英文但限制国家，不再搜到美国公司） |
+
+---
+## v2.0.1（2026-06-06）
+
+### 🛠 修复：停止任务按钮无响应问题
+
+#### 问题描述
+
+点击发现页面的「停止任务」按钮时，页面没有任何视觉反馈，且任务不会立即停止。用户会误以为按钮失效。
+
+#### 原因分析
+
+1. **前端缺少视觉反馈**—— `stopSearchTask()` 只是默默发了 POST 请求，没有在界面上显示任何"停止信号已发送"的提示，用户感觉按钮"没反应"。
+2. **后端停止检查点不足**—— 停止信号 `_global_stop_flag` 只在 `run_search_task()` 的以下两个位置被检查：
+   - 处理每个**扩展关键词**之前
+   - 处理每个**搜索结果**之前
+
+   而每个搜索结果（公司）的完整分析流程 `_auto_analyze_and_save()` 内部——包含官网抓取、邮箱提取、关键词分析、**DeepSeek AI 分析**（最耗时，通常 30-60 秒）——完全没有检查停止标志，导致用户点击停止后仍需等待当前公司的 AI 分析完成才能生效。
+
+#### 修改内容
+
+##### 前端 — `app/templates/discovery.html`
+
+- `stopSearchTask()` 函数增加实时反馈：
+  - 点击后按钮立即置灰并显示「⏳ 正在停止...」加载动画
+  - 状态栏文字立即更新为「正在停止」
+  - 3 秒后自动刷新任务状态，以便前端及时反映后端处理结果
+  - 请求失败时弹出错误提示
+
+##### 后端 — `app/services/search_task_service.py`
+
+在 `_auto_analyze_and_save()` 内部新增**两处停止信号检查**：
+
+1. **官网爬取完成后、邮箱提取前**（第 265-270 行）
+   - 场景：爬取完成但 AI 分析还未开始
+   - 行为：保存已爬取的内容，标记公司为已分析，安全返回
+
+2. **DeepSeek AI 分析调用前**（第 288-293 行）
+   - 场景：即将进入最耗时的 AI 分析步骤
+   - 行为：跳过 AI 分析，直接保存当前已有数据（邮箱、关键词等），标记公司为已分析，安全返回
+
+同时优化了 `run_search_task()` 的主循环：
+- 在每次处理新关键词时重置任务状态为 `Running`，避免状态同步问题
+
+#### 预期效果
+
+- 点击「停止任务」后页面立即显示停止状态反馈
+- 任务在 2-3 秒内（而非 30-60 秒）停止响应
+- 已抓取但未完成 AI 分析的公司数据不会丢失，会以部分分析状态保存到数据库
+- 停止后可通过「恢复」按钮继续未完成的搜索任务（断点续跑）
+
+#### 涉及文件
+
+| 文件 | 修改类型 |
+|------|----------|
+| `app/templates/discovery.html` | 前端交互优化 |
+| `app/services/search_task_service.py` | 后端停止逻辑增强 |
 
 ---
 

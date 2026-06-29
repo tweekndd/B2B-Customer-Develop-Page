@@ -256,6 +256,10 @@ async def analyze_single(customer_id: int, db: Session = Depends(get_db)):
                 customer.sales_hook = ai_result.get("sales_hook", "")
                 customer.target_position = ai_result.get("target_position", "")
                 customer.identified_projects = ai_result.get("identified_projects", "")
+                # AI 提取城市（如果有且客户尚无 city）
+                ai_city = ai_result.get("address_city", "")
+                if ai_city and not customer.city:
+                    customer.city = ai_city.strip()
                 customer_info = {"country": customer.country or "", "company_name": customer.company_name}
                 customer.ai_summary = generate_summary(ai_result, customer_info)
             else:
@@ -637,6 +641,10 @@ async def reanalyze_customer(customer_id: int, db: Session = Depends(get_db)):
             customer.sales_hook = ai_result.get("sales_hook", "")
             customer.target_position = ai_result.get("target_position", "")
             customer.identified_projects = ai_result.get("identified_projects", "")
+            # AI 提取城市（如果有且客户尚无 city）
+            ai_city = ai_result.get("address_city", "")
+            if ai_city and not customer.city:
+                customer.city = ai_city.strip()
             customer_info = {"country": customer.country or "", "company_name": customer.company_name}
             customer.ai_summary = generate_summary(ai_result, customer_info)
             # 重新评分（公司类型可能变了）

@@ -1,6 +1,7 @@
 """
-AI Trade Customer Analyzer V3.2.3 - 主程序入口
+AI Trade Customer Analyzer V3.2.5 - 主程序入口
 客户发现 + 客户分析 + 客户数据库平台
+V3.2.5: 增加 city 字段 + 地理编码缓存 + 城市级地图定位
 """
 import os
 from contextlib import asynccontextmanager
@@ -32,8 +33,8 @@ async def lifespan(app: FastAPI):
         print(f"  缓存清理跳过: {e}")
 
     print("=" * 50)
-    print("  AI Trade Customer Analyzer V3.2.4")
-    print(" 客户发现 + AI分析 + 客户数据库 + Hunter + Prospeo 邮箱 + 地图可视化")
+    print("  AI Trade Customer Analyzer V3.2.5")
+    print(" 客户发现 + AI分析 + 客户数据库 + Hunter + Prospeo 邮箱 + 城市级地图")
     print("=" * 50)
     print(" 访问地址: http://localhost:8000")
     print(" 客户列表: http://localhost:8000")
@@ -48,9 +49,9 @@ async def lifespan(app: FastAPI):
 templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI(
-    title="AI Trade Customer Analyzer V3.2.4",
-    description="客户发现 + 客户分析 + 客户数据库平台 + Hunter 邮箱查找 + Prospeo 邮箱发现 + 地图可视化",
-    version="3.2.4",
+    title="AI Trade Customer Analyzer V3.2.5",
+    description="客户发现 + AI分析 + 客户数据库 + Hunter 邮箱查找 + Prospeo 邮箱发现 + 城市级地图",
+    version="3.2.5",
     lifespan=lifespan,
 )
 

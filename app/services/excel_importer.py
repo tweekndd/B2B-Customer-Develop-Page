@@ -19,10 +19,12 @@ COLUMN_MAPPING = {
     "网站": "website",
     "country": "country",
     "国家": "country",
+    "city": "city",
+    "城市": "city",
 }
 
-# 需要的最终字段
-REQUIRED_FIELDS = ["company_name", "website", "country"]
+# 需要的最终字段（表头中可识别的列名集合）
+REQUIRED_FIELDS = ["company_name", "website", "country", "city"]
 
 
 def _normalize_column_name(raw: str) -> str:
@@ -114,6 +116,7 @@ def import_customers(customers: List[Dict]) -> int:
                 company_name=company_name,
                 website=website,
                 country=c.get("country", ""),
+                city=c.get("city", ""),
             )
             db.add(customer)
             count += 1
