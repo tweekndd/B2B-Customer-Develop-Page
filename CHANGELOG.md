@@ -22,10 +22,11 @@
 - 无 API Key 时完全不影响现有功能
 
 **新增文件**：
-- `app/services/firecrawl_service.py` — `FirecrawlService` 类（scrape_url + crawl_website，全异步）
+- `app/services/firecrawl_service.py` — `FirecrawlService` 类（scrape_url 单页抓取，1 credit/次）
 
 **修改文件**：
 - `app/services/website_scraper.py` — 三层降级逻辑嵌入 + HEAD 成功率统计 + Firecrawl 懒加载
+- `app/services/firecrawl_service.py` — 移除 crawl_website 方法，统一为仅 scrape_url（V3.2.6 优化）
 - `requirements.txt` — 新增 `firecrawl-py>=4.0.0`
 
 **配置方式**：
@@ -39,8 +40,8 @@ python main.py
 
 | 文件 | 操作 |
 |------|------|
-| `app/services/firecrawl_service.py` | **新建** — Firecrawl SDK 封装（markdown 模式，1 credit/页） |
-| `app/services/website_scraper.py` | 修改 — 三层降级 + HEAD 预检成功率统计 + Firecrawl 懒加载 |
+| `app/services/firecrawl_service.py` | **新建** — Firecrawl SDK 封装（markdown 模式，1 credit/页），V3.2.6 移除 crawl_website 方法 |
+| `app/services/website_scraper.py` | 修改 — 三层降级 + HEAD 预检成功率统计 + Firecrawl 懒加载；全部改用 scrape_url（1 credit） |
 | `requirements.txt` | 修改 — 新增 `firecrawl-py>=4.0.0` |
 | `main.py` | 修改 — 版本号 V3.2.5 → V3.2.6 |
 

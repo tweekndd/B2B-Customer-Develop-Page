@@ -254,7 +254,7 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── waterfall.py             # 瀑布式邮箱发现 API
 │   │   └── geocode.py               # 地理编码 API（后台任务模式）
 │   ├── services/
-│   │   ├── firecrawl_service.py     # Firecrawl 爬虫降级服务（scrape_url + crawl_website）
+│   │   ├── firecrawl_service.py     # Firecrawl 爬虫降级服务（scrape_url 单页抓取，1 credit/次）
 │   │   ├── website_scraper.py       # 官网抓取 V2（多阶段 URL 发现 + Firecrawl 三层降级）
 │   │   ├── email_extractor.py       # 邮箱提取
 │   │   ├── keyword_analyzer.py      # 关键词分析（从配置文件加载）

@@ -356,8 +356,8 @@ async def scrape_website(website_url: str) -> Optional[str]:
       第3层降级：GET 后内容合计 < 200 字符 → Firecrawl Scrape（1 credit）
       全部通过 → 免费爬虫搞定
 
-      V3.2.6 优化：所有降级统一为 1 credit scrape_url，不再调用 crawl_website（原 10 页 → 1 页）。
-      兜底只需要首页内容就够判断客户业务类型。
+      V3.2.6 优化：所有降级统一为 1 credit scrape_url，无需全站爬取。
+      原 crawl_website 方法已整体移除，整个项目仅使用单页抓取。
 
     返回合并后的纯文本，如果全无内容则返回 None。
     """
