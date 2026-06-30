@@ -352,9 +352,12 @@ async def scrape_website(website_url: str) -> Optional[str]:
     采用多阶段 URL 发现策略，带 Firecrawl 自动降级：
 
       第1层降级：首页 GET 失败 → Firecrawl Scrape（1 credit）
-      第2层降级：33条 HEAD 成功率 < 50% → Firecrawl Crawl（~10 credits）
-      第3层降级：GET 后内容合计 < 200 字符 → Firecrawl Crawl（~10 credits）
+      第2层降级：33条 HEAD 成功率 < 50% → Firecrawl Scrape（1 credit）
+      第3层降级：GET 后内容合计 < 200 字符 → Firecrawl Scrape（1 credit）
       全部通过 → 免费爬虫搞定
+
+      V3.2.6 优化：所有降级统一为 1 credit scrape_url，不再调用 crawl_website（原 10 页 → 1 页）。
+      兜底只需要首页内容就够判断客户业务类型。
 
     返回合并后的纯文本，如果全无内容则返回 None。
     """
@@ -413,15 +416,15 @@ async def scrape_website(website_url: str) -> Optional[str]:
 
         if probe_rate < 0.5 and firecrawl and firecrawl.available:
             logger.info(
-                "[降级-2/3] HEAD 成功率 %.1f%% < 50%% → Firecrawl Crawl: %s",
+                "[降级-2/3] HEAD 成功率 %.1f%% < 50%% → Firecrawl Scrape (1 credit): %s",
                 probe_rate * 100,
                 base_url,
             )
-            fc_result = await firecrawl.crawl_website(base_url)
+            fc_result = await firecrawl.scrape_url(base_url)
             if fc_result:
                 return _truncate_content(fc_result)
             logger.info(
-                "Firecrawl Crawl 未返回内容，继续免费流程: %s", base_url
+                "Firecrawl Scrape 未返回内容，继续免费流程: %s", base_url
             )
 
         # ---- 阶段 3：构建最终 GET 目标列表 ----
@@ -455,11 +458,11 @@ async def scrape_website(website_url: str) -> Optional[str]:
 
     if total_content > 0 and total_content < 200 and firecrawl and firecrawl.available:
         logger.info(
-            "[降级-3/3] 内容仅 %d 字符 → Firecrawl Crawl: %s",
+            "[降级-3/3] 内容仅 %d 字符 → Firecrawl Scrape (1 credit): %s",
             total_content,
             base_url,
         )
-        fc_result = await firecrawl.crawl_website(base_url)
+        fc_result = await firecrawl.scrape_url(base_url)
         if fc_result:
             return _truncate_content(fc_result)
 

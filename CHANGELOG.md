@@ -11,13 +11,14 @@
 | 层级 | 触发条件 | 降级方式 | Credits |
 |:----|:---------|:---------|:--------|
 | **第1层** | 首页 GET 完全失败（被屏蔽/反爬） | → Firecrawl Scrape 单页 | **1 credit** |
-| **第2层** | 33 条 HEAD 预检成功率 < 50% | → Firecrawl Crawl 全站发现 | **~10 credits** |
-| **第3层** | GET 后内容合计 < 200 字符（SPA/JS空页） | → Firecrawl Crawl 兜底 | **~10 credits** |
+| **第2层** | 33 条 HEAD 预检成功率 < 50% | → Firecrawl Scrape 1页 | **1 credit** |
+| **第3层** | GET 后内容合计 < 200 字符（SPA/JS空页） | → Firecrawl Scrape 1页 | **1 credit** |
 
 **成本控制**：
 - 仅使用 `formats=["markdown"]` 模式（1 credit/页），性价比最高
+- 所有降级统一为 **1 credit Scrape**，不再全站爬取
 - 80% 网站免费爬虫搞定 → **0 credits**
-- Firecrawl 免费层 1000 credits/月，覆盖 200+ 客户网站绰绰有余
+- Firecrawl 免费层 1000 credits/月，覆盖 1000+ 降级兜底绰绰有余
 - 无 API Key 时完全不影响现有功能
 
 **新增文件**：
