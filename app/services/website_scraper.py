@@ -24,6 +24,29 @@ _VERIFY_SSL = os.environ.get("SCRAPE_VERIFY_SSL", "").lower() == "true"
 logger = logging.getLogger("website_scraper")
 
 # ============================================================
+# Firecrawl 降级支持（延迟初始化，避免缺少 SDK 时导入失败）
+# ============================================================
+_firecrawl_instance = None
+
+
+def _get_firecrawl_service():
+    """懒加载 FirecrawlService 单例"""
+    global _firecrawl_instance
+    if _firecrawl_instance is None:
+        try:
+            from app.services.firecrawl_service import FirecrawlService
+
+            _firecrawl_instance = FirecrawlService()
+        except ImportError:
+            logger.debug("FirecrawlService 不可用（未安装 firecrawl-py）")
+            _firecrawl_instance = None
+        except Exception as e:
+            logger.warning("FirecrawlService 初始化异常: %s", e)
+            _firecrawl_instance = None
+    return _firecrawl_instance
+
+
+# ============================================================
 # HEAD 预检路径列表
 # 爬虫先对这些路径发 HEAD 请求，只对返回 200 的发起 GET 抓取
 # 覆盖了常见的连字符、下划线、无分隔符、PHP/HTML 后缀等变体
@@ -326,12 +349,12 @@ async def _probe_paths(
 async def scrape_website(website_url: str) -> Optional[str]:
     """
     异步抓取客户官网
-    采用多阶段 URL 发现策略：
+    采用多阶段 URL 发现策略，带 Firecrawl 自动降级：
 
-      阶段 1：抓取首页（用于内容 + 链接发现）
-      阶段 2：从首页解析相关链接（CPU 线程） + 对扩展路径发 HEAD 预检（并行执行）
-      阶段 3：GET 抓取所有有效页面（HEAD 验证通过的路径 + 发现的链接）
-      阶段 4：合并去重后返回纯文本
+      第1层降级：首页 GET 失败 → Firecrawl Scrape（1 credit）
+      第2层降级：33条 HEAD 成功率 < 50% → Firecrawl Crawl（~10 credits）
+      第3层降级：GET 后内容合计 < 200 字符 → Firecrawl Crawl（~10 credits）
+      全部通过 → 免费爬虫搞定
 
     返回合并后的纯文本，如果全无内容则返回 None。
     """
@@ -339,11 +362,27 @@ async def scrape_website(website_url: str) -> Optional[str]:
     if not base_url:
         return None
 
+    # 初始化 Firecrawl（无 API key 时 available=False）
+    firecrawl = _get_firecrawl_service()
+
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
     async with httpx.AsyncClient(verify=_VERIFY_SSL) as client:
         # ---- 阶段 1：抓取首页 ----
         homepage_html = await _fetch_raw_html(client, base_url + "/", semaphore)
+
+        # ===== 第1层降级：首页 GET 失败 =====
+        if homepage_html is None and firecrawl and firecrawl.available:
+            logger.info(
+                "[降级-1/3] 首页 GET 失败 → Firecrawl Scrape: %s", base_url
+            )
+            fc_result = await firecrawl.scrape_url(base_url)
+            if fc_result:
+                return _truncate_content(fc_result)
+            logger.info(
+                "Firecrawl Scrape 未返回内容，继续免费流程: %s", base_url
+            )
+
         homepage_text = _extract_text_from_html(homepage_html) if homepage_html else None
 
         # ---- 阶段 2：并行执行 链接发现 + HEAD 预检 ----
@@ -359,6 +398,31 @@ async def scrape_website(website_url: str) -> Optional[str]:
             return await _probe_paths(client, base_url, PROBE_PATHS, semaphore)
 
         discovered_urls, valid_paths = await asyncio.gather(_discover(), _probe())
+
+        # ===== 第2层降级：HEAD 成功率 < 50% =====
+        probe_total = len(PROBE_PATHS)
+        probe_success = len(valid_paths)
+        probe_rate = probe_success / probe_total if probe_total > 0 else 0
+        logger.info(
+            "HEAD 预检统计: %d/%d 成功 (%.1f%%) — %s",
+            probe_success,
+            probe_total,
+            probe_rate * 100,
+            base_url,
+        )
+
+        if probe_rate < 0.5 and firecrawl and firecrawl.available:
+            logger.info(
+                "[降级-2/3] HEAD 成功率 %.1f%% < 50%% → Firecrawl Crawl: %s",
+                probe_rate * 100,
+                base_url,
+            )
+            fc_result = await firecrawl.crawl_website(base_url)
+            if fc_result:
+                return _truncate_content(fc_result)
+            logger.info(
+                "Firecrawl Crawl 未返回内容，继续免费流程: %s", base_url
+            )
 
         # ---- 阶段 3：构建最终 GET 目标列表 ----
         # 优先级：首页发现的链接 > HEAD 预检确认的路径
@@ -383,6 +447,22 @@ async def scrape_website(website_url: str) -> Optional[str]:
         ]
         fetched_texts = await asyncio.gather(*fetch_tasks) if get_targets else []
 
+    # ===== 第3层降级：内容合计 < 200 字符 =====
+    total_content = len(homepage_text) if homepage_text else 0
+    for text in fetched_texts:
+        if text:
+            total_content += len(text)
+
+    if total_content > 0 and total_content < 200 and firecrawl and firecrawl.available:
+        logger.info(
+            "[降级-3/3] 内容仅 %d 字符 → Firecrawl Crawl: %s",
+            total_content,
+            base_url,
+        )
+        fc_result = await firecrawl.crawl_website(base_url)
+        if fc_result:
+            return _truncate_content(fc_result)
+
     # ---- 阶段 5：合并去重 ----
     all_texts: list[str] = []
     seen = set()
@@ -402,6 +482,7 @@ async def scrape_website(website_url: str) -> Optional[str]:
                 all_texts.append(text)
 
     if not all_texts:
+        # 有内容但不足 200 字符的情况已在第3层处理，到这里说明确实没内容
         return None
 
     # 合并所有文本
@@ -412,3 +493,11 @@ async def scrape_website(website_url: str) -> Optional[str]:
         combined = combined[:50000]
 
     return combined
+
+
+def _truncate_content(text: str, max_chars: int = 50000) -> str:
+    """统一截断超长文本"""
+    if len(text) > max_chars:
+        logger.debug("内容超长，截断至 %d 字符", max_chars)
+        return text[:max_chars]
+    return text

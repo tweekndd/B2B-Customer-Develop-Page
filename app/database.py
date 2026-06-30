@@ -78,7 +78,7 @@ class Customer(Base):
     # V2.2 新增：客户自定义评级（1-5星，0=未评级）
     star_rating = Column(Integer, default=0, comment="客户评级: 0未评级/1-5星")
 
-    # V3.2.5 新增：城市字段（用于地理编码定位到城市级别）
+    # V3.2.5 新增：城市字段（V3.2.6 Firecrawl 降级集成）
     city = Column(String(200), nullable=True, comment="城市")
     # V3.2.4 新增：Geocoding 地理编码字段
     latitude = Column(Float, nullable=True, default=None, comment="纬度")
@@ -189,7 +189,7 @@ class AnalysisCache(Base):
 
 
 class GeocodeCache(Base):
-    """地理编码结果缓存（V3.2.5 新增，避免重复请求 Nominatim）"""
+    """地理编码结果缓存（V3.2.5 新增 → V3.2.6 Firecrawl 降级集成）"""
     __tablename__ = "geocode_cache"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -277,7 +277,7 @@ def init_db():
     _migrate_add_column(engine, "customers", "latitude", "FLOAT")
     _migrate_add_column(engine, "customers", "longitude", "FLOAT")
     _migrate_add_column(engine, "customers", "geocode_status", "VARCHAR(20) DEFAULT 'pending'")
-    # V3.2.5 新增：city 字段
+    # V3.2.5 新增：city 字段（V3.2.6 +Firecrawl 降级）
     _migrate_add_column(engine, "customers", "city", "VARCHAR(200)")
     # 搜索任务表字段
     _migrate_add_column(engine, "search_tasks", "task_log", "TEXT")

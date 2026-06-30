@@ -1,5 +1,49 @@
 # 更新日志
 
+## v3.2.6（2026-06-30）
+
+### 🔥 Firecrawl 智能降级 — 三层兜底 + 性价比最优
+
+**问题**：免费爬虫对反爬/JS 渲染/非标准 URL 结构的网站完全无法抓取，遇到这类网站时返回空内容，影响客户数据完整性。
+
+**方案**：集成 Firecrawl SDK 作为免费爬虫的智能降级方案，三层递进触发：
+
+| 层级 | 触发条件 | 降级方式 | Credits |
+|:----|:---------|:---------|:--------|
+| **第1层** | 首页 GET 完全失败（被屏蔽/反爬） | → Firecrawl Scrape 单页 | **1 credit** |
+| **第2层** | 33 条 HEAD 预检成功率 < 50% | → Firecrawl Crawl 全站发现 | **~10 credits** |
+| **第3层** | GET 后内容合计 < 200 字符（SPA/JS空页） | → Firecrawl Crawl 兜底 | **~10 credits** |
+
+**成本控制**：
+- 仅使用 `formats=["markdown"]` 模式（1 credit/页），性价比最高
+- 80% 网站免费爬虫搞定 → **0 credits**
+- Firecrawl 免费层 1000 credits/月，覆盖 200+ 客户网站绰绰有余
+- 无 API Key 时完全不影响现有功能
+
+**新增文件**：
+- `app/services/firecrawl_service.py` — `FirecrawlService` 类（scrape_url + crawl_website，全异步）
+
+**修改文件**：
+- `app/services/website_scraper.py` — 三层降级逻辑嵌入 + HEAD 成功率统计 + Firecrawl 懒加载
+- `requirements.txt` — 新增 `firecrawl-py>=4.0.0`
+
+**配置方式**：
+```bash
+# 设置 Firecrawl API Key（免费 1000 credits/月，无需绑卡）
+export FIRECRAWL_API_KEY=fc-your_key_here
+python main.py
+```
+
+### 涉及文件
+
+| 文件 | 操作 |
+|------|------|
+| `app/services/firecrawl_service.py` | **新建** — Firecrawl SDK 封装（markdown 模式，1 credit/页） |
+| `app/services/website_scraper.py` | 修改 — 三层降级 + HEAD 预检成功率统计 + Firecrawl 懒加载 |
+| `requirements.txt` | 修改 — 新增 `firecrawl-py>=4.0.0` |
+| `main.py` | 修改 — 版本号 V3.2.5 → V3.2.6 |
+
+---
 ## v3.2.5（2026-06-29）
 
 ### 🧠 官网爬虫 V2 — 多阶段 URL 发现
@@ -1201,7 +1245,19 @@ hl=pl, lr=lang_pl, cr=countryPL, gl=pl
 
 ### 历史版本
 
-- **v2.6.0** —— 去重强化 + 测试套件 + PostgreSQL + 多设备数据同步（当前版本）
+- **v3.2.6** —— Firecrawl 智能降级三层兜底 ← 当前版本
+- **v3.2.5** —— 官网爬虫 V2 多阶段 URL 发现 + 城市级地图增强 + Bug 修复
+- **v3.2.4** —— 客户地理分布地图
+- **v3.2.3** —— 前端 JS 模块化重构
+- **v3.2.2** —— Prospeo 邮箱发现 + 性能优化
+- **v3.2.1** —— 瀑布式邮箱发现 + 搜索引擎运行时切换
+- **v3.1.2** —— Hunter × 跟进一体化
+- **v3.0.0** —— Hunter.io 邮箱查找集成
+- **v2.9.0** —— 并发安全 & 行业解耦 & 集成测试
+- **v2.8.0** —— 架构重构 & 前端健壮性 & 配置管理系统
+- **v2.7.1** —— SSL 验证配置化 & 去重性能优化 & 评分配置缓存
+- **v2.7.0** —— 统一去重 & 任务日志 & 前端版本号统一
+- **v2.6.0** —— 去重强化 & 测试套件 & PostgreSQL & 多设备数据同步
 - **v2.5.0** —— 相似客户扩展（种子客户）
 - **v2.2.3** —— Tavily 搜索引擎支持
 - **v2.2.2** —— 客户评级、多字段搜索、数据库自动迁移
