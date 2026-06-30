@@ -89,6 +89,11 @@ async def map_page(request: Request):
     return templates.TemplateResponse("map.html", {"request": request, "active_nav": "map"})
 
 
+@app.get("/sync")
+async def sync_page(request: Request):
+    return templates.TemplateResponse("sync.html", {"request": request, "active_nav": "sync"})
+
+
 @app.post("/admin/cleanup-cache")
 def cleanup_cache(db: Session = Depends(get_db)):
     """手动触发所有过期缓存清理"""

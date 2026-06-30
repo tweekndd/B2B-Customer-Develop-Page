@@ -73,6 +73,11 @@
 
                 <div class="sidebar-section-label">数据</div>
 
+                <a class="sidebar-link{% if active_nav == 'sync' %} active{% endif %}" href="/sync" onclick="navigate(event, '/sync')">
+                    <i class="bi bi-arrow-repeat"></i>
+                    <span>数据同步</span>
+                </a>
+
                 <a class="sidebar-link" href="javascript:void(0)" id="navStatsLink" title="加载统计数据...">
                     <i class="bi bi-database"></i>
                     <span id="navStatsText">加载中...</span>

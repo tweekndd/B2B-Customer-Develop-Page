@@ -1,17 +1,45 @@
 """
 数据同步 API 路由
 支持多设备间通过网盘/USB 导出导入客户数据
+V3.2.6: 新增备份/恢复功能（网页端一键操作）
 从 routes.py 拆分（V2.8 重构）
 """
 import datetime
+import json
+import os
+import shutil
+from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db, Customer, SearchTask, SearchCache, WebsiteCache, AnalysisCache
 from app.services.deduplication import find_existing_customer
 
 router = APIRouter(tags=["sync"])
+
+# ─── 备份目录配置 ───
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+BACKUP_DIR = PROJECT_ROOT / "backups"
+
+
+def _ensure_backup_dir():
+    """确保备份目录存在"""
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    return BACKUP_DIR
+
+
+def _get_db_path():
+    """获取数据库文件路径"""
+    # 默认数据库是 app/customers.db 或环境变量指定的其他路径
+    db_url = os.environ.get("DATABASE_URL", "").strip()
+    if db_url and db_url.startswith("sqlite:///"):
+        # 提取 SQLite 文件路径
+        rel_path = db_url[10:]  # 去掉 "sqlite:///"
+        return PROJECT_ROOT / rel_path
+    return PROJECT_ROOT / "app" / "customers.db"
 
 
 @router.get("/sync/export")
@@ -320,3 +348,97 @@ def import_sync_data(
             "analysis_cache": ac_count,
         },
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# 备份/恢复接口（网页端一键操作）
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/sync/backups")
+def list_backups():
+    """列出所有数据库备份文件"""
+    backup_dir = _ensure_backup_dir()
+    backups = []
+    for f in sorted(backup_dir.glob("backup_*.db"), key=os.path.getmtime, reverse=True):
+        backups.append({
+            "name": f.name,
+            "size": f.stat().st_size,
+            "size_str": _fmt_size(f.stat().st_size),
+            "modified": datetime.datetime.fromtimestamp(
+                f.stat().st_mtime
+            ).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return {"backups": backups, "backup_dir": str(backup_dir)}
+
+
+@router.post("/sync/backup")
+def create_backup():
+    """创建数据库备份（带时间戳）"""
+    db_path = _get_db_path()
+    if not db_path.exists():
+        raise HTTPException(status_code=404, detail=f"数据库文件未找到: {db_path}")
+
+    backup_dir = _ensure_backup_dir()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = backup_dir / f"backup_{timestamp}.db"
+
+    try:
+        shutil.copy2(db_path, backup_file)
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="数据库文件被占用，请关闭程序后重试")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"备份失败: {e}")
+
+    return {
+        "message": "备份成功",
+        "file": backup_file.name,
+        "size": backup_file.stat().st_size,
+        "size_str": _fmt_size(backup_file.stat().st_size),
+        "backup_dir": str(backup_dir),
+    }
+
+
+@router.post("/sync/restore")
+def restore_backup(name: str = Query(..., description="备份文件名，如 backup_20260101_120000.db")):
+    """从备份文件恢复数据库"""
+    backup_dir = _ensure_backup_dir()
+    backup_file = backup_dir / name
+
+    if not backup_file.exists():
+        raise HTTPException(status_code=404, detail=f"备份文件未找到: {name}")
+
+    if not backup_file.is_file() or backup_file.suffix != ".db":
+        raise HTTPException(status_code=400, detail="无效的备份文件")
+
+    db_path = _get_db_path()
+
+    # 自动备份当前数据库
+    before_backup = db_path.with_suffix(db_path.suffix + ".before_restore.bak")
+    try:
+        if db_path.exists():
+            shutil.copy2(db_path, before_backup)
+    except Exception:
+        pass  # 自动备份失败不影响恢复
+
+    try:
+        shutil.copy2(backup_file, db_path)
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="数据库文件被占用，请关闭程序后重试")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"恢复失败: {e}")
+
+    return {
+        "message": "恢复成功，请重启程序使数据生效",
+        "restored_from": name,
+        "backup_before": before_backup.name if before_backup.exists() else None,
+    }
+
+
+def _fmt_size(size_bytes: int) -> str:
+    """格式化文件大小"""
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / 1024 / 1024:.1f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes} 字节"

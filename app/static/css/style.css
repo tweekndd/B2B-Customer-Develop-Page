@@ -1500,6 +1500,27 @@ pre {
   }
 }
 
+/* ---- 同步页操作结果框 ---- */
+.results-box {
+    margin-top: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    background: var(--slate-100);
+    border: 1px solid var(--border-color);
+    animation: slideDown 0.3s var(--ease-out);
+}
+.results-box.success {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+}
+.results-box.error {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: var(--danger);
+}
+
 @media (max-width: 768px) {
   .app-main-content {
     padding: 12px;

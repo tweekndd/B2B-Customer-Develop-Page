@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}数据同步 - AI Trade Customer Analyzer{% endblock %}
+{% block page_title %}<i class="bi bi-arrow-repeat me-2"></i>数据同步{% endblock %}
+
+{% block top_bar_actions %}
+<button class="btn btn-outline-primary btn-sm" onclick="refreshStatus()" title="刷新状态">
+    <i class="bi bi-arrow-clockwise"></i> 刷新
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- 状态总览卡片 -->
+<div class="row g-3 mb-4" id="statsOverview">
+    <div class="col-md-3">
+        <div class="card border-0 stats-card" data-animate>
+            <div class="card-body text-center py-3">
+                <div class="stats-icon mb-2"><i class="bi bi-people-fill" style="color: var(--accent-500); font-size: 1.8rem;"></i></div>
+                <div class="stats-number" id="statCustomers" style="font-size: 1.6rem; font-weight: 700;">-</div>
+                <div class="stats-label" style="font-size: 0.8rem; color: var(--text-secondary);">客户总数</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 stats-card" data-animate>
+            <div class="card-body text-center py-3">
+                <div class="stats-icon mb-2"><i class="bi bi-check-circle-fill" style="color: var(--success); font-size: 1.8rem;"></i></div>
+                <div class="stats-number" id="statAnalyzed" style="font-size: 1.6rem; font-weight: 700;">-</div>
+                <div class="stats-label" style="font-size: 0.8rem; color: var(--text-secondary);">已分析</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 stats-card" data-animate>
+            <div class="card-body text-center py-3">
+                <div class="stats-icon mb-2"><i class="bi bi-database" style="color: var(--warm-500); font-size: 1.8rem;"></i></div>
+                <div class="stats-number" id="statDbSize" style="font-size: 1.6rem; font-weight: 700;">-</div>
+                <div class="stats-label" style="font-size: 0.8rem; color: var(--text-secondary);">数据库大小</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 stats-card" data-animate>
+            <div class="card-body text-center py-3">
+                <div class="stats-icon mb-2"><i class="bi bi-archive" style="color: var(--info-color); font-size: 1.8rem;"></i></div>
+                <div class="stats-number" id="statBackups" style="font-size: 1.6rem; font-weight: 700;">-</div>
+                <div class="stats-label" style="font-size: 0.8rem; color: var(--text-secondary);">备份数</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作按钮区 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-0 h-100" data-animate>
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); padding: 1rem 1.25rem;">
+                <h5 class="mb-0" style="font-weight: 600;"><i class="bi bi-download me-2" style="color: var(--accent-500);"></i>导出同步文件</h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-secondary mb-3" style="font-size: 0.9rem;">
+                    将当前所有客户数据、搜索记录、分析缓存导出为一个 JSON 文件。
+                    可用于备份或在另一台电脑上导入。
+                </p>
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <button class="btn btn-accent" id="btnExport" onclick="doExport()">
+                        <i class="bi bi-download me-1"></i> 导出数据
+                    </button>
+                    <span id="exportInfo" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
+                </div>
+                <div id="exportResult" class="results-box" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 h-100" data-animate>
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); padding: 1rem 1.25rem;">
+                <h5 class="mb-0" style="font-weight: 600;"><i class="bi bi-upload me-2" style="color: var(--accent-500);"></i>导入同步文件</h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-secondary mb-3" style="font-size: 0.9rem;">
+                    从导出的 JSON 文件恢复数据。系统会自动去重，
+                    已存在的客户不会重复创建。
+                </p>
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <input type="file" id="importFileInput" accept=".json" style="display: none;" onchange="doImport(this)">
+                    <button class="btn btn-accent" id="btnImport" onclick="document.getElementById('importFileInput').click()">
+                        <i class="bi bi-upload me-1"></i> 选择文件并导入
+                    </button>
+                    <span id="importInfo" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
+                </div>
+                <div id="importResult" class="results-box" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-0 h-100" data-animate>
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); padding: 1rem 1.25rem;">
+                <h5 class="mb-0" style="font-weight: 600;"><i class="bi bi-save2 me-2" style="color: var(--warm-500);"></i>备份数据库</h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-secondary mb-3" style="font-size: 0.9rem;">
+                    直接复制当前数据库文件（customers.db）进行快照备份。
+                    备份文件保存在 <code>backups/</code> 目录，带时间戳。
+                </p>
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <button class="btn btn-primary" id="btnBackup" onclick="doBackup()">
+                        <i class="bi bi-save2 me-1"></i> 立即备份
+                    </button>
+                    <span id="backupInfo" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
+                </div>
+                <div id="backupResult" class="results-box" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 h-100" data-animate>
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); padding: 1rem 1.25rem;">
+                <h5 class="mb-0" style="font-weight: 600;"><i class="bi bi-arrow-counterclockwise me-2" style="color: var(--danger);"></i>恢复数据库</h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-secondary mb-3" style="font-size: 0.9rem;">
+                    从之前的备份文件恢复数据库。恢复前会自动备份当前数据，
+                    防止误操作。操作完成后<b>需要重启程序</b>。
+                </p>
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <select class="form-select" id="restoreSelect" style="width: auto; min-width: 200px;">
+                        <option value="">-- 请先刷新备份列表 --</option>
+                    </select>
+                    <button class="btn btn-outline-danger" id="btnRefreshBackups" onclick="loadBackups()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button class="btn btn-danger" id="btnRestore" onclick="doRestore()" disabled>
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> 恢复
+                    </button>
+                </div>
+                <div id="restoreResult" class="results-box" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 备份列表 -->
+<div class="card border-0" data-animate>
+    <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); padding: 1rem 1.25rem;">
+        <h5 class="mb-0" style="font-weight: 600;"><i class="bi bi-archive me-2" style="color: var(--info-color);"></i>历史备份</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle" id="backupsTable">
+                <thead>
+                    <tr>
+                        <th>文件名</th>
+                        <th>大小</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="backupsBody">
+                    <tr>
+                        <td colspan="4" class="text-center text-secondary py-4">
+                            <i class="bi bi-inbox me-2"></i>暂无备份，点击"立即备份"创建
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/sync.js"></script>
+{% endblock %}
