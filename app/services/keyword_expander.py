@@ -105,7 +105,7 @@ async def expand_keywords(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 GLM_API_URL, headers=headers, json=payload
             )
@@ -115,6 +115,9 @@ async def expand_keywords(
             content = result["choices"][0]["message"]["content"]
             return _parse_keyword_list(content)
 
+    except httpx.TimeoutException:
+        print(f"关键词扩展请求超时（GLM API响应慢）")
+        return [base_keyword]
     except httpx.HTTPStatusError as e:
         reason = ""
         try:

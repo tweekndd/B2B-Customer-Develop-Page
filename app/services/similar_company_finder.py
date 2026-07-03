@@ -125,7 +125,7 @@ async def _translate_to_local_language(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(glm_url, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
@@ -149,6 +149,9 @@ async def _translate_to_local_language(
             translated = json.loads(content)
             print(f"  关键词已翻译为{language_name}: {translated.get('keywords', [])[:3]}...")
             return translated
+    except httpx.TimeoutException:
+        print(f"  本地化翻译超时（GLM API响应慢），继续使用英文搜索")
+        return None
     except Exception as e:
         print(f"  本地化翻译失败，继续使用英文搜索: {str(e)[:100]}")
         return None
