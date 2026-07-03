@@ -1,0 +1,281 @@
+{# 用户管理页面（V4.0 新增）- 仅管理员可见 #}
+{% extends "base.html" %}
+
+{% block title %}用户管理 - AI Trade Customer Analyzer{% endblock %}
+{% block page_title %}用户管理{% endblock %}
+{% block active_nav %}users{% endblock %}
+
+{% block content %}
+<div class="page-card">
+    <div class="page-card-header">
+        <div class="page-card-header-left">
+            <h2><i class="bi bi-people-fill"></i> 系统用户</h2>
+            <p class="text-muted">管理所有可访问本系统的用户账号</p>
+        </div>
+        <div class="page-card-header-right">
+            <button class="btn btn-primary" onclick="showAddUserModal()">
+                <i class="bi bi-plus-lg"></i> 新增用户
+            </button>
+        </div>
+    </div>
+
+    <!-- 用户列表 -->
+    <div class="table-responsive">
+        <table class="table" id="usersTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>用户名</th>
+                    <th>角色</th>
+                    <th>状态</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody">
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <div class="skeleton-loading">加载中...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 新增用户弹窗 -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新增用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group mb-3">
+                    <label>用户名</label>
+                    <input type="text" id="newUsername" class="form-control" placeholder="输入用户名">
+                </div>
+                <div class="form-group mb-3">
+                    <label>密码</label>
+                    <input type="password" id="newPassword" class="form-control" placeholder="输入密码（至少4位）">
+                </div>
+                <div class="form-group mb-3">
+                    <label>角色</label>
+                    <select id="newRole" class="form-select">
+                        <option value="user">普通用户</option>
+                        <option value="admin">管理员</option>
+                    </select>
+                </div>
+                <div id="addUserError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="createUser()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div class="modal fade" id="passwordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">修改密码</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" id="passwordUserLabel">用户：</p>
+                <div class="form-group">
+                    <label>新密码</label>
+                    <input type="password" id="editPassword" class="form-control" placeholder="输入新密码（至少4位）">
+                </div>
+                <div id="passwordError" class="alert alert-danger d-none mt-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="updatePassword()">确认修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let users = [];
+let editingUserId = null;
+
+// 加载用户列表
+async function loadUsers() {
+    try {
+        const res = await fetch('/api/users/');
+        if (!res.ok) {
+            if (res.status === 401) window.location.href = '/login';
+            throw new Error('加载失败');
+        }
+        const data = await res.json();
+        users = data.users;
+        renderUsers();
+    } catch (err) {
+        document.getElementById('usersTableBody').innerHTML =
+            `<tr><td colspan="6" class="text-center text-danger py-4">加载失败: ${err.message}</td></tr>`;
+    }
+}
+
+function renderUsers() {
+    const tbody = document.getElementById('usersTableBody');
+    if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无用户</td></tr>';
+        return;
+    }
+    tbody.innerHTML = users.map(u => {
+        const isAdmin = u.role === 'admin';
+        const isActive = u.is_active;
+        const roleBadge = isAdmin
+            ? '<span class="badge bg-warning text-dark">管理员</span>'
+            : '<span class="badge bg-info">普通用户</span>';
+        const statusBadge = isActive
+            ? '<span class="badge bg-success">激活</span>'
+            : '<span class="badge bg-secondary">禁用</span>';
+        const created = u.created_at ? new Date(u.created_at).toLocaleDateString('zh-CN') : '-';
+        return `<tr>
+            <td>${u.id}</td>
+            <td><strong>${escHtml(u.username)}</strong></td>
+            <td>${roleBadge}</td>
+            <td>${statusBadge}</td>
+            <td>${created}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="showPasswordModal(${u.id})" title="修改密码">
+                    <i class="bi bi-key"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-${isActive ? 'warning' : 'success'}" onclick="toggleActive(${u.id})" title="${isActive ? '禁用' : '启用'}">
+                    <i class="bi bi-${isActive ? 'pause-circle' : 'play-circle'}"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${u.id})" title="删除">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function escHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+}
+
+// 新增用户
+function showAddUserModal() {
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('newRole').value = 'user';
+    document.getElementById('addUserError').classList.add('d-none');
+    new bootstrap.Modal(document.getElementById('addUserModal')).show();
+}
+
+async function createUser() {
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const role = document.getElementById('newRole').value;
+    const errorEl = document.getElementById('addUserError');
+
+    if (!username) { showError(errorEl, '用户名不能为空'); return; }
+    if (password.length < 4) { showError(errorEl, '密码至少 4 位'); return; }
+
+    try {
+        const res = await fetch('/api/users/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, role }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showError(errorEl, data.detail || '创建失败');
+            return;
+        }
+        bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+        showToast(`用户 "${username}" 创建成功`, 'success');
+        loadUsers();
+    } catch (err) {
+        showError(errorEl, '网络错误');
+    }
+}
+
+// 修改密码
+function showPasswordModal(userId) {
+    editingUserId = userId;
+    const user = users.find(u => u.id === userId);
+    document.getElementById('passwordUserLabel').textContent = `用户：${user ? user.username : '未知'}`;
+    document.getElementById('editPassword').value = '';
+    document.getElementById('passwordError').classList.add('d-none');
+    new bootstrap.Modal(document.getElementById('passwordModal')).show();
+}
+
+async function updatePassword() {
+    const password = document.getElementById('editPassword').value;
+    const errorEl = document.getElementById('passwordError');
+
+    if (password.length < 4) { showError(errorEl, '密码至少 4 位'); return; }
+
+    try {
+        const res = await fetch(`/api/users/${editingUserId}/password`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showError(errorEl, data.detail || '修改失败');
+            return;
+        }
+        bootstrap.Modal.getInstance(document.getElementById('passwordModal')).hide();
+        showToast('密码已更新', 'success');
+    } catch (err) {
+        showError(errorEl, '网络错误');
+    }
+}
+
+// 启用/禁用
+async function toggleActive(userId) {
+    const user = users.find(u => u.id === userId);
+    if (!confirm(`确定${user.is_active ? '禁用' : '启用'}用户 "${user.username}" 吗？`)) return;
+
+    try {
+        const res = await fetch(`/api/users/${userId}/toggle-active`, { method: 'PUT' });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.detail || '操作失败', 'danger'); return; }
+        showToast(data.message, 'success');
+        loadUsers();
+    } catch (err) {
+        showToast('网络错误', 'danger');
+    }
+}
+
+// 删除用户
+async function deleteUser(userId) {
+    const user = users.find(u => u.id === userId);
+    if (!confirm(`确定删除用户 "${user?.username}" 吗？此操作不可撤销。`)) return;
+
+    try {
+        const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.detail || '删除失败', 'danger'); return; }
+        showToast(data.message, 'success');
+        loadUsers();
+    } catch (err) {
+        showToast('网络错误', 'danger');
+    }
+}
+
+function showError(el, msg) {
+    el.textContent = msg;
+    el.classList.remove('d-none');
+}
+
+// 页面加载
+document.addEventListener('DOMContentLoaded', loadUsers);
+</script>
+{% endblock %}

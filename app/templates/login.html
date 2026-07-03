@@ -1,0 +1,277 @@
+{# 登录页面（V4.0 新增）- 不继承 base.html，独立全屏居中布局 #}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - AI Trade Customer Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --slate-50: #f8fafc;
+            --slate-100: #f1f5f9;
+            --slate-200: #e2e8f0;
+            --slate-300: #cbd5e1;
+            --slate-400: #94a3b8;
+            --slate-500: #64748b;
+            --slate-600: #475569;
+            --slate-700: #334155;
+            --slate-800: #1e293b;
+            --slate-900: #0f172a;
+            --slate-950: #020617;
+            --teal-500: #14b8a6;
+            --teal-600: #0d9488;
+            --teal-700: #0f766e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--slate-950) 0%, var(--slate-900) 50%, var(--slate-800) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+        }
+        .login-card {
+            background: var(--slate-800);
+            border: 1px solid var(--slate-700);
+            border-radius: 16px;
+            padding: 40px 32px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+        }
+        .login-brand {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .login-brand-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--teal-500), var(--teal-700));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+        .login-brand-icon i {
+            font-size: 28px;
+            color: white;
+        }
+        .login-brand h1 {
+            color: white;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .login-brand p {
+            color: var(--slate-400);
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            color: var(--slate-300);
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--slate-900);
+            border: 1px solid var(--slate-700);
+            border-radius: 10px;
+            color: white;
+            font-size: 15px;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        .form-input:focus {
+            border-color: var(--teal-500);
+            box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+        }
+        .form-input::placeholder {
+            color: var(--slate-500);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--teal-500), var(--teal-600));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .login-btn:hover { opacity: 0.9; }
+        .login-btn:active { transform: scale(0.98); }
+        .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .error-message.show { display: block; }
+
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--slate-500);
+            font-size: 13px;
+        }
+
+        .password-toggle {
+            position: relative;
+        }
+        .password-toggle .toggle-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--slate-500);
+            cursor: pointer;
+            padding: 4px;
+        }
+        .password-toggle .toggle-btn:hover {
+            color: var(--slate-300);
+        }
+
+        /* 加载动画 */
+        .spinner-mini {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="login-brand-icon">
+                    <i class="bi bi-graph-up-arrow"></i>
+                </div>
+                <h1>AI Trade Analyzer</h1>
+                <p>V3.2.6 · 请登录以继续</p>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="loginForm" onsubmit="return handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" class="form-input" placeholder="输入用户名" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <div class="password-toggle">
+                        <input type="password" id="password" class="form-input" placeholder="输入密码" autocomplete="current-password" required>
+                        <button type="button" class="toggle-btn" onclick="togglePassword()" tabindex="-1">
+                            <i class="bi bi-eye" id="passwordIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" class="login-btn" id="loginBtn">
+                    <span id="loginBtnText">登 录</span>
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <i class="bi bi-shield-lock"></i> 仅授权用户可访问
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function togglePassword() {
+            const pwd = document.getElementById('password');
+            const icon = document.getElementById('passwordIcon');
+            if (pwd.type === 'password') {
+                pwd.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                pwd.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorEl = document.getElementById('errorMessage');
+            const btn = document.getElementById('loginBtn');
+            const btnText = document.getElementById('loginBtnText');
+
+            if (!username || !password) {
+                showError('请输入用户名和密码');
+                return false;
+            }
+
+            // 禁用按钮
+            btn.disabled = true;
+            btnText.innerHTML = '<span class="spinner-mini"></span> 登录中...';
+            errorEl.classList.remove('show');
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    // 跳转回之前页面或首页
+                    const params = new URLSearchParams(window.location.search);
+                    const next = params.get('next') || '/';
+                    window.location.href = next;
+                } else {
+                    showError(data.detail || '登录失败');
+                }
+            } catch (err) {
+                showError('网络错误，请稍后重试');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = '登 录';
+            }
+
+            return false;
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMessage');
+            el.textContent = msg;
+            el.classList.add('show');
+        }
+    </script>
+</body>
+</html>
