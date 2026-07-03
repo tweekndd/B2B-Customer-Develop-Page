@@ -125,8 +125,26 @@ async def expand_keywords(
                     response.raise_for_status()
                     result = response.json()
 
-                    content = result["choices"][0]["message"]["content"]
-                    return _parse_keyword_list(content)
+                    raw_content = result["choices"][0]["message"].get("content", "")
+                    finish_reason = result["choices"][0].get("finish_reason", "")
+
+                    # 检查空内容
+                    if not raw_content or not raw_content.strip():
+                        print(f"关键词 [{model_name}] 返回空内容(finish_reason={finish_reason})")
+                        if finish_reason == "length" and model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                            print(f"  → 内容截断，降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                            break
+                        continue
+
+                    parsed = _parse_keyword_list(raw_content)
+                    if parsed:
+                        return parsed
+                    else:
+                        print(f"关键词 [{model_name}] JSON解析失败, finish_reason={finish_reason}")
+                        print(f"  原始响应前500字符: {raw_content[:500]}")
+                        if model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                            print(f"  → 降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                            break
 
             except httpx.TimeoutException:
                 if attempt < max_retries:

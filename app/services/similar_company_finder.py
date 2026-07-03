@@ -27,6 +27,11 @@ from app.services.country_language_map import get_language_info
 # SSL 验证开关（与 website_scraper 共享同一环境变量）
 _VERIFY_SSL = os.environ.get("SCRAPE_VERIFY_SSL", "").lower() == "true"
 
+# GLM 模型降级配置
+_GLM_FALLBACK_MODELS = os.environ.get(
+    "GLM_FALLBACK_MODELS", "glm-4.7-flash,glm-4-flash-250414"
+).split(",")
+
 # ── 行业分类映射 ──
 INDUSTRY_KEYWORDS = {
     "水处理设备": ["water treatment", "wastewater", "sewage", "filtration", "purification",
@@ -124,37 +129,90 @@ async def _translate_to_local_language(
         "Content-Type": "application/json",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(glm_url, headers=headers, json=payload)
-            response.raise_for_status()
-            result = response.json()
-            content = result["choices"][0]["message"]["content"]
+    # 模型降级策略：遍历模型列表，429/503 时自动降级到下一个模型
+    for model_idx, model_name in enumerate(_GLM_FALLBACK_MODELS):
+        model_name = model_name.strip()
+        payload["model"] = model_name
 
-            # 清理可能的代码块标记
-            content = content.strip()
-            if content.startswith("```"):
-                lines = content.split("\n")
-                json_lines = []
-                in_block = False
-                for line in lines:
-                    if line.strip().startswith("```"):
-                        in_block = not in_block
+        max_retries = 2
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    response = await client.post(glm_url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    result = response.json()
+                    raw_content = result["choices"][0]["message"].get("content", "")
+                    finish_reason = result["choices"][0].get("finish_reason", "")
+
+                    # 检查空内容
+                    if not raw_content or not raw_content.strip():
+                        print(f"  本地化翻译 [{model_name}] 返回空内容(finish_reason={finish_reason})")
+                        if finish_reason == "length" and model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                            print(f"    → 内容截断，降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                            break
                         continue
-                    if in_block:
-                        json_lines.append(line)
-                if json_lines:
-                    content = "\n".join(json_lines)
 
-            translated = json.loads(content)
-            print(f"  关键词已翻译为{language_name}: {translated.get('keywords', [])[:3]}...")
-            return translated
-    except httpx.TimeoutException:
-        print(f"  本地化翻译超时（GLM API响应慢），继续使用英文搜索")
-        return None
-    except Exception as e:
-        print(f"  本地化翻译失败，继续使用英文搜索: {str(e)[:100]}")
-        return None
+                    # 清理可能的代码块标记
+                    content = raw_content.strip()
+                    if content.startswith("```"):
+                        lines = content.split("\n")
+                        json_lines = []
+                        in_block = False
+                        for line in lines:
+                            if line.strip().startswith("```"):
+                                in_block = not in_block
+                                continue
+                            if in_block:
+                                json_lines.append(line)
+                        if json_lines:
+                            content = "\n".join(json_lines)
+
+                    translated = json.loads(content)
+                    print(f"  关键词已翻译为{language_name}: {translated.get('keywords', [])[:3]}...")
+                    return translated
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    wait = attempt * 3
+                    print(f"  本地化翻译 [{model_name}] 超时，{wait}秒后第{attempt + 1}次重试...")
+                    await asyncio.sleep(wait)
+                elif model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                    print(f"  本地化翻译 [{model_name}] 连续超时，降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                    break
+                else:
+                    print(f"  本地化翻译 [{model_name}] 超时，所有模型均失败，继续使用英文搜索")
+                    return None
+            except httpx.HTTPStatusError as e:
+                reason = ""
+                try:
+                    body = e.response.json()
+                    reason = body.get("error", {}).get("message", "")
+                except Exception:
+                    reason = e.response.text[:100]
+
+                if e.response.status_code in (429, 502, 503):
+                    if model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                        print(f"  本地化翻译 [{model_name}] 限流({reason})，降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                        break
+                    else:
+                        print(f"  本地化翻译 [{model_name}] 限流({reason})，所有模型均失败，继续使用英文搜索")
+                        return None
+                else:
+                    print(f"  本地化翻译 [{model_name}] HTTP错误: {e.response.status_code} - {reason}，继续使用英文搜索")
+                    return None
+            except json.JSONDecodeError:
+                print(f"  本地化翻译 [{model_name}] JSON解析失败, finish_reason={finish_reason}")
+                if raw_content:
+                    print(f"    原始响应前500字符: {raw_content[:500]}")
+                if model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                    print(f"    → 降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                    break
+                return None
+            except Exception as e:
+                print(f"  本地化翻译 [{model_name}] 异常: {type(e).__name__}: {str(e)[:200]}，继续使用英文搜索")
+                return None
+
+    return None
 
 
 def _classify_industry(products: List[str], keywords: List[str]) -> str:
@@ -256,68 +314,163 @@ async def extract_business_info(company_url: str) -> Optional[Dict]:
         "Content-Type": "application/json",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(glm_url_2, headers=headers, json=payload)
-            response.raise_for_status()
-            result = response.json()
-            content = result["choices"][0]["message"]["content"]
+    # 模型降级策略：遍历模型列表，429/503 时自动降级到下一个模型
+    for model_idx, model_name in enumerate(_GLM_FALLBACK_MODELS):
+        model_name = model_name.strip()
+        payload["model"] = model_name
 
-            # 解析JSON
-            content = content.strip()
-            if content.startswith("```"):
-                lines = content.split("\n")
-                json_lines = []
-                in_block = False
-                for line in lines:
-                    if line.strip().startswith("```"):
-                        in_block = not in_block
+        max_retries = 2
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    response = await client.post(glm_url_2, headers=headers, json=payload)
+                    response.raise_for_status()
+                    result = response.json()
+                    raw_content = result["choices"][0]["message"].get("content", "")
+                    finish_reason = result["choices"][0].get("finish_reason", "")
+
+                    # 检查空内容
+                    if not raw_content or not raw_content.strip():
+                        print(f"  业务提取 [{model_name}] 返回空内容(finish_reason={finish_reason})")
+                        if finish_reason == "length" and model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                            print(f"    → 内容截断，降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                            break
                         continue
-                    if in_block:
-                        json_lines.append(line)
-                if json_lines:
-                    content = "\n".join(json_lines)
 
-            data = json.loads(content)
-            data["keywords"] = list(set(data.get("keywords", []) + extracted_keywords))
-            # 行业分类
-            industry = data.get("industry", "")
-            if industry:
-                mapped = _classify_industry(data.get("products", []), data.get("keywords", []))
-                data["industry_category"] = mapped
-            return data
+                    # 解析JSON
+                    content = raw_content.strip()
+                    if content.startswith("```"):
+                        lines = content.split("\n")
+                        json_lines = []
+                        in_block = False
+                        for line in lines:
+                            if line.strip().startswith("```"):
+                                in_block = not in_block
+                                continue
+                            if in_block:
+                                json_lines.append(line)
+                        if json_lines:
+                            content = "\n".join(json_lines)
 
-    except json.JSONDecodeError:
-        # 尝试从文本中提取JSON
-        try:
-            start = content.index("{")
-            end = content.rindex("}") + 1
-            data = json.loads(content[start:end])
-            return data
-        except Exception:
-            # LLM失败，用关键词分析结果兜底
-            if extracted_keywords:
-                mapped = _classify_industry([], extracted_keywords)
-                return {
-                    "industry": mapped,
-                    "products": [],
-                    "keywords": extracted_keywords[:10],
-                    "company_name": "",
-                    "industry_category": mapped,
-                }
-            return None
-    except Exception as e:
-        print(f"LLM业务信息提取失败: {str(e)[:100]}")
-        if extracted_keywords:
-            mapped = _classify_industry([], extracted_keywords)
-            return {
-                "industry": mapped,
-                "products": [],
-                "keywords": extracted_keywords[:10],
-                "company_name": "",
-                "industry_category": mapped,
-            }
-        return None
+                    data = json.loads(content)
+                    data["keywords"] = list(set(data.get("keywords", []) + extracted_keywords))
+                    # 行业分类
+                    industry = data.get("industry", "")
+                    if industry:
+                        mapped = _classify_industry(data.get("products", []), data.get("keywords", []))
+                        data["industry_category"] = mapped
+                    return data
+
+            except json.JSONDecodeError:
+                print(f"  业务提取 [{model_name}] JSON解析失败, finish_reason={finish_reason}")
+                if raw_content:
+                    # 尝试从文本中提取JSON
+                    try:
+                        start = raw_content.index("{")
+                        end = raw_content.rindex("}") + 1
+                        data = json.loads(raw_content[start:end])
+                        data["keywords"] = list(set(data.get("keywords", []) + extracted_keywords))
+                        industry = data.get("industry", "")
+                        if industry:
+                            data["industry_category"] = _classify_industry(data.get("products", []), data.get("keywords", []))
+                        return data
+                    except (ValueError, json.JSONDecodeError):
+                        pass
+                    print(f"    原始响应前500字符: {raw_content[:500]}")
+                if model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                    print(f"    → 降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                    break
+                # LLM全部失败，用关键词分析结果兜底
+                if extracted_keywords:
+                    mapped = _classify_industry([], extracted_keywords)
+                    return {
+                        "industry": mapped,
+                        "products": [],
+                        "keywords": extracted_keywords[:10],
+                        "company_name": "",
+                        "industry_category": mapped,
+                    }
+                return None
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    wait = attempt * 3
+                    print(f"  业务提取 [{model_name}] 超时，{wait}秒后第{attempt + 1}次重试...")
+                    await asyncio.sleep(wait)
+                elif model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                    print(f"  业务提取 [{model_name}] 连续超时，降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                    break
+                else:
+                    print(f"  业务提取 [{model_name}] 超时，所有模型均失败")
+                    if extracted_keywords:
+                        mapped = _classify_industry([], extracted_keywords)
+                        return {
+                            "industry": mapped,
+                            "products": [],
+                            "keywords": extracted_keywords[:10],
+                            "company_name": "",
+                            "industry_category": mapped,
+                        }
+                    return None
+            except httpx.HTTPStatusError as e:
+                reason = ""
+                try:
+                    body = e.response.json()
+                    reason = body.get("error", {}).get("message", "")
+                except Exception:
+                    reason = e.response.text[:100]
+
+                if e.response.status_code in (429, 502, 503):
+                    if model_idx < len(_GLM_FALLBACK_MODELS) - 1:
+                        print(f"  业务提取 [{model_name}] 限流({reason})，降级到 {_GLM_FALLBACK_MODELS[model_idx + 1]}")
+                        break
+                    else:
+                        print(f"  业务提取 [{model_name}] 限流({reason})，所有模型均失败")
+                        if extracted_keywords:
+                            mapped = _classify_industry([], extracted_keywords)
+                            return {
+                                "industry": mapped,
+                                "products": [],
+                                "keywords": extracted_keywords[:10],
+                                "company_name": "",
+                                "industry_category": mapped,
+                            }
+                        return None
+                else:
+                    print(f"  业务提取 [{model_name}] HTTP错误: {e.response.status_code} - {reason}")
+                    if extracted_keywords:
+                        mapped = _classify_industry([], extracted_keywords)
+                        return {
+                            "industry": mapped,
+                            "products": [],
+                            "keywords": extracted_keywords[:10],
+                            "company_name": "",
+                            "industry_category": mapped,
+                        }
+                    return None
+            except Exception as e:
+                print(f"  业务提取 [{model_name}] 异常: {type(e).__name__}: {str(e)[:200]}")
+                if extracted_keywords:
+                    mapped = _classify_industry([], extracted_keywords)
+                    return {
+                        "industry": mapped,
+                        "products": [],
+                        "keywords": extracted_keywords[:10],
+                        "company_name": "",
+                        "industry_category": mapped,
+                    }
+                return None
+
+    # 所有模型均失败，用关键词分析结果兜底
+    if extracted_keywords:
+        mapped = _classify_industry([], extracted_keywords)
+        return {
+            "industry": mapped,
+            "products": [],
+            "keywords": extracted_keywords[:10],
+            "company_name": "",
+            "industry_category": mapped,
+        }
+    return None
 
 
 async def search_similar_companies(
