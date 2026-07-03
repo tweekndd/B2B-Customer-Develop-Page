@@ -86,6 +86,19 @@ class Customer(Base):
     geocode_status = Column(String(20), default="pending", comment="地理编码状态: pending/done/failed")
 
 
+class User(Base):
+    """用户认证（V4.0 新增）"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String(50), unique=True, nullable=False, index=True, comment="用户名")
+    password_hash = Column(String(255), nullable=False, comment="密码哈希（bcrypt）")
+    role = Column(String(20), default="user", comment="角色: admin/user")
+    is_active = Column(Integer, default=1, comment="是否激活: 1激活/0禁用")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, comment="更新时间")
+
+
 class SearchTask(Base):
     """搜索任务（V2.0 新增）"""
     __tablename__ = "search_tasks"
