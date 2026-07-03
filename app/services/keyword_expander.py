@@ -4,6 +4,7 @@ AI关键词扩展服务（V2.2 升级）
 """
 import os
 import json
+import asyncio
 from typing import Optional, List
 import httpx
 
@@ -104,32 +105,44 @@ async def expand_keywords(
         "Content-Type": "application/json",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                GLM_API_URL, headers=headers, json=payload
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            content = result["choices"][0]["message"]["content"]
-            return _parse_keyword_list(content)
-
-    except httpx.TimeoutException:
-        print(f"关键词扩展请求超时（GLM API响应慢）")
-        return [base_keyword]
-    except httpx.HTTPStatusError as e:
-        reason = ""
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
         try:
-            body = e.response.json()
-            reason = body.get("error", {}).get("message", "")
-        except Exception:
-            reason = e.response.text[:100]
-        print(f"关键词扩展HTTP错误: {e.response.status_code} - {reason}")
-        return [base_keyword]
-    except Exception as e:
-        print(f"关键词扩展API调用异常: {type(e).__name__}: {str(e)[:200]}")
-        return [base_keyword]
+            async with httpx.AsyncClient(timeout=120) as client:
+                response = await client.post(
+                    GLM_API_URL, headers=headers, json=payload
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                content = result["choices"][0]["message"]["content"]
+                return _parse_keyword_list(content)
+
+        except httpx.TimeoutException:
+            if attempt < max_retries:
+                wait = attempt * 2
+                print(f"关键词扩展请求超时，{wait}秒后第{attempt + 1}次重试...")
+                await asyncio.sleep(wait)
+            else:
+                print(f"关键词扩展请求超时（已重试{max_retries}次）")
+                return [base_keyword]
+        except httpx.HTTPStatusError as e:
+            reason = ""
+            try:
+                body = e.response.json()
+                reason = body.get("error", {}).get("message", "")
+            except Exception:
+                reason = e.response.text[:100]
+            if e.response.status_code in (429, 502, 503) and attempt < max_retries:
+                wait = attempt * 3
+                print(f"关键词扩展限流({reason})，{wait}秒后第{attempt + 1}次重试...")
+                await asyncio.sleep(wait)
+            else:
+                print(f"关键词扩展HTTP错误: {e.response.status_code} - {reason}")
+                return [base_keyword]
+        except Exception as e:
+            print(f"关键词扩展API调用异常: {type(e).__name__}: {str(e)[:200]}")
+            return [base_keyword]
 
 
 def _parse_keyword_list(content: str) -> Optional[List[str]]:

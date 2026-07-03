@@ -117,7 +117,8 @@
       "Bash(git commit -m 'V3.5.0 AI引擎更换：DeepSeek → 智谱 GLM-4.7-Flash（免费） *)",
       "Bash(git commit -m 'V3.5.0 hotfix: max_tokens 1000→4096 适配GLM-4.7-Flash思考模型 *)",
       "Bash(git commit -m 'V3.5.0 hotfix2: 改进GLM API 429错误处理与日志 *)",
-      "Bash(git commit -m 'V3.5.0 hotfix3: 增加GLM API超时处理，timeout 30s→60s *)"
+      "Bash(git commit -m 'V3.5.0 hotfix3: 增加GLM API超时处理，timeout 30s→60s *)",
+      "Bash(git commit -m 'V3.5.0 hotfix4: 增加GLM API自动重试机制（限流/超时） *)"
     ]
   }
 }

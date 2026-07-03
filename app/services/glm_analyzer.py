@@ -6,6 +6,7 @@ API Key 通过环境变量 GLM_API_KEY 传入
 """
 import os
 import json
+import asyncio
 from typing import Optional, Dict, Any
 import httpx
 
@@ -47,7 +48,7 @@ def _build_prompt(website_text: str) -> str:
 
 
 async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
-    """调用GLM API分析公司，返回解析后的JSON字典"""
+    """调用GLM API分析公司，返回解析后的JSON字典（含自动重试）"""
     if not GLM_API_KEY:
         print("未设置GLM_API_KEY（或DEEPSEEK_API_KEY）环境变量，跳过AI分析")
         return None
@@ -72,32 +73,46 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
         "Content-Type": "application/json",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                GLM_API_URL, headers=headers, json=payload
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            ai_content = result["choices"][0]["message"]["content"]
-            return _parse_ai_response(ai_content)
-
-    except httpx.TimeoutException:
-        print("GLM API 请求超时")
-        return None
-    except httpx.HTTPStatusError as e:
-        reason = ""
+    # 最大重试 3 次，应对免费 API 高峰期限流/超时
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
         try:
-            body = e.response.json()
-            reason = body.get("error", {}).get("message", "")
-        except Exception:
-            reason = e.response.text[:100]
-        print(f"GLM API HTTP错误: {e.response.status_code} - {reason}")
-        return None
-    except Exception as e:
-        print(f"GLM API 调用异常: {type(e).__name__}: {str(e)[:200]}")
-        return None
+            async with httpx.AsyncClient(timeout=120) as client:
+                response = await client.post(
+                    GLM_API_URL, headers=headers, json=payload
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                ai_content = result["choices"][0]["message"]["content"]
+                return _parse_ai_response(ai_content)
+
+        except httpx.TimeoutException:
+            if attempt < max_retries:
+                wait = attempt * 2
+                print(f"GLM API 请求超时，{wait}秒后第{attempt + 1}次重试...")
+                await asyncio.sleep(wait)
+            else:
+                print(f"GLM API 请求超时（已重试{max_retries}次）")
+                return None
+        except httpx.HTTPStatusError as e:
+            reason = ""
+            try:
+                body = e.response.json()
+                reason = body.get("error", {}).get("message", "")
+            except Exception:
+                reason = e.response.text[:100]
+            # 429/503 可重试，其他错误直接放弃
+            if e.response.status_code in (429, 502, 503) and attempt < max_retries:
+                wait = attempt * 3
+                print(f"GLM API 限流({reason})，{wait}秒后第{attempt + 1}次重试...")
+                await asyncio.sleep(wait)
+            else:
+                print(f"GLM API HTTP错误: {e.response.status_code} - {reason}")
+                return None
+        except Exception as e:
+            print(f"GLM API 调用异常: {type(e).__name__}: {str(e)[:200]}")
+            return None
 
 
 def _parse_ai_response(content: str) -> Optional[Dict[str, Any]]:
