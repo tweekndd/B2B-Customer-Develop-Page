@@ -18,6 +18,11 @@ GLM_API_URL = os.environ.get(
 )
 GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4.7-flash")
 
+# 模型降级列表：首选可用时用首选，429/限流时自动降级到备用
+GLM_FALLBACK_MODELS = os.environ.get(
+    "GLM_FALLBACK_MODELS", "glm-4.7-flash,glm-4-flash-250414"
+).split(",")
+
 
 # 向后兼容：如果未设置 GLM_API_KEY，尝试读取旧的 DEEPSEEK_API_KEY
 if not GLM_API_KEY:
@@ -73,46 +78,57 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
         "Content-Type": "application/json",
     }
 
-    # 最大重试 3 次，应对免费 API 高峰期限流/超时
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                response = await client.post(
-                    GLM_API_URL, headers=headers, json=payload
-                )
-                response.raise_for_status()
-                result = response.json()
+    # 模型降级策略：遍历模型列表，429/503 时自动降级到下一个模型
+    # 每个模型最多重试 2 次超时
+    for model_idx, model_name in enumerate(GLM_FALLBACK_MODELS):
+        model_name = model_name.strip()
+        payload["model"] = model_name
 
-                ai_content = result["choices"][0]["message"]["content"]
-                return _parse_ai_response(ai_content)
-
-        except httpx.TimeoutException:
-            if attempt < max_retries:
-                wait = attempt * 2
-                print(f"GLM API 请求超时，{wait}秒后第{attempt + 1}次重试...")
-                await asyncio.sleep(wait)
-            else:
-                print(f"GLM API 请求超时（已重试{max_retries}次）")
-                return None
-        except httpx.HTTPStatusError as e:
-            reason = ""
+        max_retries = 2
+        for attempt in range(1, max_retries + 1):
             try:
-                body = e.response.json()
-                reason = body.get("error", {}).get("message", "")
-            except Exception:
-                reason = e.response.text[:100]
-            # 429/503 可重试，其他错误直接放弃
-            if e.response.status_code in (429, 502, 503) and attempt < max_retries:
-                wait = attempt * 3
-                print(f"GLM API 限流({reason})，{wait}秒后第{attempt + 1}次重试...")
-                await asyncio.sleep(wait)
-            else:
-                print(f"GLM API HTTP错误: {e.response.status_code} - {reason}")
+                async with httpx.AsyncClient(timeout=120) as client:
+                    response = await client.post(
+                        GLM_API_URL, headers=headers, json=payload
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+
+                    ai_content = result["choices"][0]["message"]["content"]
+                    return _parse_ai_response(ai_content)
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    wait = attempt * 3
+                    print(f"GLM [{model_name}] 请求超时，{wait}秒后第{attempt + 1}次重试...")
+                    await asyncio.sleep(wait)
+                elif model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                    print(f"GLM [{model_name}] 连续超时，降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                    break  # 跳出内层循环，尝试下一个模型
+                else:
+                    print(f"GLM [{model_name}] 请求超时，所有模型均失败")
+                    return None
+            except httpx.HTTPStatusError as e:
+                reason = ""
+                try:
+                    body = e.response.json()
+                    reason = body.get("error", {}).get("message", "")
+                except Exception:
+                    reason = e.response.text[:100]
+
+                if e.response.status_code in (429, 502, 503):
+                    if model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                        print(f"GLM [{model_name}] 限流({reason})，降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                        break  # 跳出内层循环，尝试下一个模型
+                    else:
+                        print(f"GLM [{model_name}] 限流({reason})，所有模型均失败")
+                        return None
+                else:
+                    print(f"GLM [{model_name}] HTTP错误: {e.response.status_code} - {reason}")
+                    return None
+            except Exception as e:
+                print(f"GLM [{model_name}] 调用异常: {type(e).__name__}: {str(e)[:200]}")
                 return None
-        except Exception as e:
-            print(f"GLM API 调用异常: {type(e).__name__}: {str(e)[:200]}")
-            return None
 
 
 def _parse_ai_response(content: str) -> Optional[Dict[str, Any]]:

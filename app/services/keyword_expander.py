@@ -17,6 +17,11 @@ GLM_API_URL = os.environ.get(
 )
 GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4.7-flash")
 
+# 模型降级列表：首选可用时用首选，429/限流时自动降级到备用
+GLM_FALLBACK_MODELS = os.environ.get(
+    "GLM_FALLBACK_MODELS", "glm-4.7-flash,glm-4-flash-250414"
+).split(",")
+
 # 向后兼容：如果未设置 GLM_API_KEY，尝试读取旧的 DEEPSEEK_API_KEY
 if not GLM_API_KEY:
     GLM_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -105,44 +110,56 @@ async def expand_keywords(
         "Content-Type": "application/json",
     }
 
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                response = await client.post(
-                    GLM_API_URL, headers=headers, json=payload
-                )
-                response.raise_for_status()
-                result = response.json()
+    # 模型降级策略：遍历模型列表，429/503 时自动降级到下一个模型
+    for model_idx, model_name in enumerate(GLM_FALLBACK_MODELS):
+        model_name = model_name.strip()
+        payload["model"] = model_name
 
-                content = result["choices"][0]["message"]["content"]
-                return _parse_keyword_list(content)
-
-        except httpx.TimeoutException:
-            if attempt < max_retries:
-                wait = attempt * 2
-                print(f"关键词扩展请求超时，{wait}秒后第{attempt + 1}次重试...")
-                await asyncio.sleep(wait)
-            else:
-                print(f"关键词扩展请求超时（已重试{max_retries}次）")
-                return [base_keyword]
-        except httpx.HTTPStatusError as e:
-            reason = ""
+        max_retries = 2
+        for attempt in range(1, max_retries + 1):
             try:
-                body = e.response.json()
-                reason = body.get("error", {}).get("message", "")
-            except Exception:
-                reason = e.response.text[:100]
-            if e.response.status_code in (429, 502, 503) and attempt < max_retries:
-                wait = attempt * 3
-                print(f"关键词扩展限流({reason})，{wait}秒后第{attempt + 1}次重试...")
-                await asyncio.sleep(wait)
-            else:
-                print(f"关键词扩展HTTP错误: {e.response.status_code} - {reason}")
+                async with httpx.AsyncClient(timeout=120) as client:
+                    response = await client.post(
+                        GLM_API_URL, headers=headers, json=payload
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+
+                    content = result["choices"][0]["message"]["content"]
+                    return _parse_keyword_list(content)
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    wait = attempt * 3
+                    print(f"关键词 [{model_name}] 超时，{wait}秒后重试...")
+                    await asyncio.sleep(wait)
+                elif model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                    print(f"关键词 [{model_name}] 连续超时，降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                    break
+                else:
+                    print(f"关键词 [{model_name}] 超时，所有模型均失败")
+                    return [base_keyword]
+            except httpx.HTTPStatusError as e:
+                reason = ""
+                try:
+                    body = e.response.json()
+                    reason = body.get("error", {}).get("message", "")
+                except Exception:
+                    reason = e.response.text[:100]
+
+                if e.response.status_code in (429, 502, 503):
+                    if model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                        print(f"关键词 [{model_name}] 限流({reason})，降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                        break
+                    else:
+                        print(f"关键词 [{model_name}] 限流({reason})，所有模型均失败")
+                        return [base_keyword]
+                else:
+                    print(f"关键词 [{model_name}] HTTP错误: {e.response.status_code} - {reason}")
+                    return [base_keyword]
+            except Exception as e:
+                print(f"关键词 [{model_name}] 异常: {type(e).__name__}: {str(e)[:200]}")
                 return [base_keyword]
-        except Exception as e:
-            print(f"关键词扩展API调用异常: {type(e).__name__}: {str(e)[:200]}")
-            return [base_keyword]
 
 
 def _parse_keyword_list(content: str) -> Optional[List[str]]:
