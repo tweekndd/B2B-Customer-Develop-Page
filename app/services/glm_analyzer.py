@@ -93,9 +93,30 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
                     )
                     response.raise_for_status()
                     result = response.json()
+                    raw_content = result["choices"][0]["message"].get("content", "")
+                    finish_reason = result["choices"][0].get("finish_reason", "")
 
-                    ai_content = result["choices"][0]["message"]["content"]
-                    return _parse_ai_response(ai_content)
+                    # 检查空内容
+                    if not raw_content or not raw_content.strip():
+                        print(f"GLM [{model_name}] 返回空内容(finish_reason={finish_reason})")
+                        # 如果是长度截断，降级到下一个模型
+                        if finish_reason == "length" and model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                            print(f"  → 内容截断，降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                            break
+                        # 空内容不降级的话继续重试
+                        continue
+
+                    parsed = _parse_ai_response(raw_content)
+                    if parsed:
+                        return parsed
+                    else:
+                        # 解析失败，打印完整响应调试信息
+                        print(f"GLM [{model_name}] JSON解析失败, finish_reason={finish_reason}")
+                        print(f"  原始响应前500字符: {raw_content[:500]}")
+                        # 可能是格式问题，尝试下一个模型
+                        if model_idx < len(GLM_FALLBACK_MODELS) - 1:
+                            print(f"  → 降级到 {GLM_FALLBACK_MODELS[model_idx + 1]}")
+                            break
 
             except httpx.TimeoutException:
                 if attempt < max_retries:
