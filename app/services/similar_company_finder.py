@@ -116,7 +116,7 @@ async def _translate_to_local_language(
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 1000,
+        "max_tokens": 4096,
     }
 
     headers = {
@@ -245,7 +245,7 @@ async def extract_business_info(company_url: str) -> Optional[Dict]:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 1000,
+        "max_tokens": 4096,
     }
 
     headers = {

@@ -114,7 +114,8 @@
       "Bash(brew install *)",
       "Bash(sudo apt-get install -y sshpass)",
       "Bash(sshpass *)",
-      "Bash(git commit -m 'V3.5.0 AI引擎更换：DeepSeek → 智谱 GLM-4.7-Flash（免费） *)"
+      "Bash(git commit -m 'V3.5.0 AI引擎更换：DeepSeek → 智谱 GLM-4.7-Flash（免费） *)",
+      "Bash(git commit -m 'V3.5.0 hotfix: max_tokens 1000→4096 适配GLM-4.7-Flash思考模型 *)"
     ]
   }
 }

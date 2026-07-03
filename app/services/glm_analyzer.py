@@ -64,7 +64,7 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 1000,
+        "max_tokens": 4096,
     }
 
     headers = {
