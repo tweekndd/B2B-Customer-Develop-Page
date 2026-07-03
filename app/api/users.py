@@ -1,9 +1,10 @@
 """
-用户管理 API（V4.0 新增）
-仅管理员可操作：查看用户列表、新增用户、删除用户、修改密码
+用户管理 API（V4.0 新增 / V4.1 新增权限管理）
+仅管理员可操作：查看用户列表、新增用户、删除用户、修改密码、管理权限
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session as DBSession
 from app.database import get_db, User
 from app.auth import hash_password, require_admin
@@ -21,9 +22,16 @@ class UpdatePasswordRequest(BaseModel):
     password: str
 
 
+class UpdatePermissionsRequest(BaseModel):
+    search_depth_limit: Optional[int] = None
+    search_quota: Optional[int] = None
+    ai_analysis_enabled: Optional[bool] = None
+    email_finding_enabled: Optional[bool] = None
+
+
 @router.get("/")
 def list_users(admin=Depends(require_admin), db: DBSession = Depends(get_db)):
-    """获取所有用户列表"""
+    """获取所有用户列表（V4.1 新增权限字段）"""
     users = db.query(User).order_by(User.id).all()
     return {
         "users": [
@@ -33,6 +41,12 @@ def list_users(admin=Depends(require_admin), db: DBSession = Depends(get_db)):
                 "role": u.role,
                 "is_active": bool(u.is_active),
                 "created_at": u.created_at.isoformat() if u.created_at else None,
+                # V4.1 权限字段
+                "search_depth_limit": u.search_depth_limit or 50,
+                "search_quota": u.search_quota or 100,
+                "searches_used": u.searches_used or 0,
+                "ai_analysis_enabled": bool(u.ai_analysis_enabled),
+                "email_finding_enabled": bool(u.email_finding_enabled),
             }
             for u in users
         ]
@@ -174,3 +188,62 @@ def delete_user(
     db.commit()
 
     return {"success": True, "message": f"用户 '{username}' 已删除"}
+
+
+@router.put("/{user_id}/permissions")
+def update_permissions(
+    user_id: int,
+    req: UpdatePermissionsRequest,
+    admin=Depends(require_admin),
+    db: DBSession = Depends(get_db),
+):
+    """修改用户功能权限（V4.1 新增：搜索深度/配额/AI/邮箱开关）"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    updates = []
+    if req.search_depth_limit is not None:
+        if req.search_depth_limit < 1:
+            raise HTTPException(status_code=400, detail="搜索深度至少为 1")
+        user.search_depth_limit = req.search_depth_limit
+        updates.append("搜索深度")
+
+    if req.search_quota is not None:
+        if req.search_quota < 0:
+            raise HTTPException(status_code=400, detail="搜索配额不能为负数")
+        user.search_quota = req.search_quota
+        updates.append("搜索配额")
+
+    if req.ai_analysis_enabled is not None:
+        user.ai_analysis_enabled = 1 if req.ai_analysis_enabled else 0
+        updates.append("AI 分析权限")
+
+    if req.email_finding_enabled is not None:
+        user.email_finding_enabled = 1 if req.email_finding_enabled else 0
+        updates.append("邮箱查找权限")
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"用户 '{user.username}' 权限已更新: {', '.join(updates)}",
+    }
+
+
+@router.post("/{user_id}/reset-quota")
+def reset_search_quota(
+    user_id: int,
+    admin=Depends(require_admin),
+    db: DBSession = Depends(get_db),
+):
+    """重置用户已使用的搜索次数为 0"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    user.searches_used = 0
+    db.commit()
+    return {
+        "success": True,
+        "message": f"用户 '{user.username}' 已使用搜索次数已重置为 0",
+    }

@@ -54,11 +54,9 @@
                     <i class="bi bi-compass-fill"></i>
                     <span>客户发现</span>
                 </a>
-                {% endif %}
 
                 <div class="sidebar-section-label">工具</div>
 
-                {% if current_user %}
                 <a class="sidebar-link{% if active_nav == 'hunter' %} active{% endif %}" href="/hunter" onclick="navigate(event, '/hunter')">
                     <i class="bi bi-envelope-at"></i>
                     <span>Hunter 邮箱</span>

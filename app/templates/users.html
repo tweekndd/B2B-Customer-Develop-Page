@@ -1,4 +1,4 @@
-{# 用户管理页面（V4.0 新增）- 仅管理员可见 #}
+{# 用户管理页面（V4.0 新增 / V4.1 新增权限管理） #}
 {% extends "base.html" %}
 
 {% block title %}用户管理 - AI Trade Customer Analyzer{% endblock %}
@@ -10,7 +10,7 @@
     <div class="page-card-header">
         <div class="page-card-header-left">
             <h2><i class="bi bi-people-fill"></i> 系统用户</h2>
-            <p class="text-muted">管理所有可访问本系统的用户账号</p>
+            <p class="text-muted">管理所有可访问本系统的用户账号及功能权限</p>
         </div>
         <div class="page-card-header-right">
             <button class="btn btn-primary" onclick="showAddUserModal()">
@@ -28,13 +28,14 @@
                     <th>用户名</th>
                     <th>角色</th>
                     <th>状态</th>
+                    <th>权限</th>
                     <th>创建时间</th>
                     <th>操作</th>
                 </tr>
             </thead>
             <tbody id="usersTableBody">
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
+                    <td colspan="7" class="text-center text-muted py-4">
                         <div class="skeleton-loading">加载中...</div>
                     </td>
                 </tr>
@@ -100,6 +101,60 @@
         </div>
     </div>
 </div>
+
+<!-- 权限编辑弹窗 -->
+<div class="modal fade" id="permissionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑用户权限</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" id="permissionUserLabel">用户：</p>
+
+                <div class="form-group mb-3">
+                    <label><strong>搜索深度</strong> <small class="text-muted">（每次搜索允许的最大结果数）</small></label>
+                    <input type="number" id="permSearchDepth" class="form-control" min="1" max="500" value="50">
+                </div>
+
+                <div class="form-group mb-3">
+                    <label><strong>搜索次数配额</strong> <small class="text-muted">（总搜索次数上限）</small></label>
+                    <input type="number" id="permSearchQuota" class="form-control" min="0" max="99999" value="100">
+                    <small class="text-muted" id="permQuotaUsed">已使用: 0 次</small>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="d-flex align-items-center gap-2">
+                        <strong>AI 分析权限</strong>
+                        <div class="form-check form-switch mb-0">
+                            <input type="checkbox" id="permAiEnabled" class="form-check-input" checked>
+                            <label class="form-check-label" for="permAiEnabled" id="permAiLabel">允许</label>
+                        </div>
+                    </label>
+                    <small class="text-muted">关闭后用户无法使用 DeepSeek AI 分析功能</small>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="d-flex align-items-center gap-2">
+                        <strong>邮箱查找权限</strong>
+                        <div class="form-check form-switch mb-0">
+                            <input type="checkbox" id="permEmailEnabled" class="form-check-input" checked>
+                            <label class="form-check-label" for="permEmailEnabled" id="permEmailLabel">允许</label>
+                        </div>
+                    </label>
+                    <small class="text-muted">关闭后用户无法使用 Hunter/Tomba 邮箱查找功能</small>
+                </div>
+
+                <div id="permissionError" class="alert alert-danger d-none mt-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="updatePermissions()">保存权限</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -120,14 +175,14 @@ async function loadUsers() {
         renderUsers();
     } catch (err) {
         document.getElementById('usersTableBody').innerHTML =
-            `<tr><td colspan="6" class="text-center text-danger py-4">加载失败: ${err.message}</td></tr>`;
+            `<tr><td colspan="7" class="text-center text-danger py-4">加载失败: ${err.message}</td></tr>`;
     }
 }
 
 function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     if (!users.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无用户</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">暂无用户</td></tr>';
         return;
     }
     tbody.innerHTML = users.map(u => {
@@ -140,13 +195,35 @@ function renderUsers() {
             ? '<span class="badge bg-success">激活</span>'
             : '<span class="badge bg-secondary">禁用</span>';
         const created = u.created_at ? new Date(u.created_at).toLocaleDateString('zh-CN') : '-';
+
+        // 权限概览图标
+        const aiIcon = u.ai_analysis_enabled
+            ? '<span class="badge bg-success" title="AI 分析已启用"><i class="bi bi-cpu"></i></span>'
+            : '<span class="badge bg-secondary" title="AI 分析已禁用"><i class="bi bi-cpu"></i></span>';
+        const emailIcon = u.email_finding_enabled
+            ? '<span class="badge bg-success" title="邮箱查找已启用"><i class="bi bi-envelope"></i></span>'
+            : '<span class="badge bg-secondary" title="邮箱查找已禁用"><i class="bi bi-envelope"></i></span>';
+        const quotaInfo = `<span class="badge bg-info text-dark" title="搜索配额: ${u.searches_used}/${u.search_quota}"><i class="bi bi-search"></i> ${u.searches_used}/${u.search_quota}</span>`;
+        const depthInfo = `<span class="badge bg-info text-dark" title="搜索深度: ${u.search_depth_limit}"><i class="bi bi-arrows-expand"></i> ${u.search_depth_limit}</span>`;
+
+        let permCell;
+        if (isAdmin) {
+            permCell = '<span class="text-muted"><small>无限制</small></span>';
+        } else {
+            permCell = `${aiIcon} ${emailIcon} ${quotaInfo} ${depthInfo}`;
+        }
+
         return `<tr>
             <td>${u.id}</td>
             <td><strong>${escHtml(u.username)}</strong></td>
             <td>${roleBadge}</td>
             <td>${statusBadge}</td>
+            <td style="min-width: 180px;">${permCell}</td>
             <td>${created}</td>
-            <td>
+            <td style="white-space: nowrap;">
+                <button class="btn btn-sm btn-outline-info" onclick="showPermissionModal(${u.id})" title="权限设置">
+                    <i class="bi bi-shield-check"></i>
+                </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="showPasswordModal(${u.id})" title="修改密码">
                     <i class="bi bi-key"></i>
                 </button>
@@ -270,12 +347,92 @@ async function deleteUser(userId) {
     }
 }
 
+// ──── 权限管理 ────
+
+function showPermissionModal(userId) {
+    editingUserId = userId;
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    document.getElementById('permissionUserLabel').textContent = `用户：${escHtml(user.username)} (${user.role === 'admin' ? '管理员' : '普通用户'})`;
+
+    // 填充表单
+    document.getElementById('permSearchDepth').value = user.search_depth_limit || 50;
+    document.getElementById('permSearchQuota').value = user.search_quota || 100;
+    document.getElementById('permQuotaUsed').textContent = `已使用: ${user.searches_used || 0} 次`;
+
+    const aiCheck = document.getElementById('permAiEnabled');
+    aiCheck.checked = user.ai_analysis_enabled;
+    document.getElementById('permAiLabel').textContent = user.ai_analysis_enabled ? '允许' : '禁止';
+
+    const emailCheck = document.getElementById('permEmailEnabled');
+    emailCheck.checked = user.email_finding_enabled;
+    document.getElementById('permEmailLabel').textContent = user.email_finding_enabled ? '允许' : '禁止';
+
+    document.getElementById('permissionError').classList.add('d-none');
+    new bootstrap.Modal(document.getElementById('permissionModal')).show();
+}
+
+function updatePermissions() {
+    const errorEl = document.getElementById('permissionError');
+    errorEl.classList.add('d-none');
+
+    const searchDepth = parseInt(document.getElementById('permSearchDepth').value);
+    const searchQuota = parseInt(document.getElementById('permSearchQuota').value);
+    const aiEnabled = document.getElementById('permAiEnabled').checked;
+    const emailEnabled = document.getElementById('permEmailEnabled').checked;
+
+    if (searchDepth < 1) { showError(errorEl, '搜索深度至少为 1'); return; }
+    if (searchQuota < 0) { showError(errorEl, '搜索配额不能为负数'); return; }
+
+    const payload = {
+        search_depth_limit: searchDepth,
+        search_quota: searchQuota,
+        ai_analysis_enabled: aiEnabled,
+        email_finding_enabled: emailEnabled,
+    };
+
+    fetch(`/api/users/${editingUserId}/permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.detail) {
+            showError(errorEl, data.detail);
+            return;
+        }
+        bootstrap.Modal.getInstance(document.getElementById('permissionModal')).hide();
+        showToast(data.message || '权限已保存', 'success');
+        loadUsers();
+    })
+    .catch(err => showError(errorEl, '网络错误'));
+}
+
 function showError(el, msg) {
     el.textContent = msg;
     el.classList.remove('d-none');
 }
 
 // 页面加载
-document.addEventListener('DOMContentLoaded', loadUsers);
+document.addEventListener('DOMContentLoaded', function () {
+    // 权限弹窗开关切换标签更新
+    const aiCheck = document.getElementById('permAiEnabled');
+    const emailCheck = document.getElementById('permEmailEnabled');
+    if (aiCheck) {
+        aiCheck.addEventListener('change', function () {
+            const label = document.getElementById('permAiLabel');
+            if (label) label.textContent = this.checked ? '允许' : '禁止';
+        });
+    }
+    if (emailCheck) {
+        emailCheck.addEventListener('change', function () {
+            const label = document.getElementById('permEmailLabel');
+            if (label) label.textContent = this.checked ? '允许' : '禁止';
+        });
+    }
+    loadUsers();
+});
 </script>
 {% endblock %}

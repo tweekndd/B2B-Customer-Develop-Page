@@ -1,6 +1,6 @@
 """
-认证与授权模块（V4.0 新增）
-提供密码加密、Session 会话管理、角色权限检查
+认证与授权模块（V4.0 新增 / V4.1 权限检查函数）
+提供密码加密、Session 会话管理、角色权限检查、功能级权限校验
 """
 import os
 import bcrypt
@@ -45,6 +45,52 @@ def require_admin(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="请先登录")
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="权限不足，需要管理员账号")
+    return current_user
+
+
+def get_search_depth_limit(user: User) -> int:
+    """获取用户允许的搜索深度（管理员不限，取 user 字段值）"""
+    if user.role == "admin":
+        return 999
+    return user.search_depth_limit or 50
+
+
+def check_ai_analysis_permission(current_user: User = Depends(get_current_user)):
+    """FastAPI 依赖：当前用户必须有 AI 分析权限（admin 自动通过）"""
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if current_user.role != "admin" and not current_user.ai_analysis_enabled:
+        raise HTTPException(status_code=403, detail="AI 分析功能已被管理员限制，请联系管理员开通")
+    return current_user
+
+
+def check_email_finding_permission(current_user: User = Depends(get_current_user)):
+    """FastAPI 依赖：当前用户必须有邮箱查找权限（admin 自动通过）"""
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if current_user.role != "admin" and not current_user.email_finding_enabled:
+        raise HTTPException(status_code=403, detail="邮箱查找功能已被管理员限制，请联系管理员开通")
+    return current_user
+
+
+def consume_search_quota(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """FastAPI 依赖：消耗 1 次搜索配额。admin 不受限制。配额不足抛 403。"""
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if current_user.role == "admin":
+        return current_user
+    used = current_user.searches_used or 0
+    quota = current_user.search_quota or 0
+    if used >= quota:
+        raise HTTPException(
+            status_code=403,
+            detail=f"搜索次数已达上限 ({quota} 次)，请联系管理员提升配额",
+        )
+    current_user.searches_used = used + 1
+    db.commit()
     return current_user
 
 

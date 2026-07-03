@@ -20,6 +20,7 @@ from app.services.keyword_analyzer import analyze_keywords
 from app.services.deepseek_analyzer import analyze_company, generate_summary
 from app.services.scoring_engine import calculate_scores
 from app.services.search_task_service import request_stop
+from app.auth import check_ai_analysis_permission
 
 router = APIRouter(tags=["customers"])
 
@@ -228,7 +229,11 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 # ═══════════════════════════════════════════
 
 @router.post("/analyze/{customer_id}")
-async def analyze_single(customer_id: int, db: Session = Depends(get_db)):
+async def analyze_single(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(check_ai_analysis_permission),
+):
     if customer_id in _analyzing_set:
         raise HTTPException(status_code=400, detail="该客户正在分析中")
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
@@ -287,7 +292,10 @@ async def analyze_single(customer_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/analyze-all")
-async def analyze_all(db: Session = Depends(get_db)):
+async def analyze_all(
+    db: Session = Depends(get_db),
+    user=Depends(check_ai_analysis_permission),
+):
     customers = db.query(Customer).filter(Customer.analyzed_at.is_(None)).all()
     if not customers:
         return {"message": "没有待分析的客户", "analyzed_count": 0}
@@ -621,7 +629,11 @@ async def rescrape_customer(customer_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/customers/{customer_id}/re-analyze")
-async def reanalyze_customer(customer_id: int, db: Session = Depends(get_db)):
+async def reanalyze_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(check_ai_analysis_permission),
+):
     """重新AI分析客户（仅重新调用DeepSeek，不重新抓取）"""
     if customer_id in _analyzing_set:
         raise HTTPException(status_code=400, detail="该客户正在分析中")

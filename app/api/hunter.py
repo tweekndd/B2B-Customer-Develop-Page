@@ -14,6 +14,7 @@ from app.services.hunter_service import (
     clear_hunter_cache,
     HUNTER_API_KEY,
 )
+from app.auth import check_email_finding_permission
 
 router = APIRouter(tags=["hunter"])
 
@@ -61,6 +62,7 @@ def api_email_count(
     domain: str = Query(..., description="公司域名，如 stripe.com"),
     force_refresh: bool = Query(False, description="强制刷新（跳过缓存）"),
     db: Session = Depends(get_db),
+    user=Depends(check_email_finding_permission),
 ):
     """查询域名下的邮箱总量（免费，不消耗搜索额度）"""
     try:
@@ -91,6 +93,7 @@ def api_find_emails(
     company_name: str = Query(None, description="公司名称（仅用于展示）"),
     first_name: str = Query(None, description="联系人名（可选）"),
     last_name: str = Query(None, description="联系人姓（可选）"),
+    user=Depends(check_email_finding_permission),
     full_name: str = Query(None, description="联系人全名（可选，自动拆分）"),
     department: str = Query(None, description="部门筛选: executive/it/finance/sales/marketing/hr/legal/support"),
     seniority: str = Query(None, description="级别筛选: junior/senior/executive"),
@@ -173,6 +176,7 @@ def api_find_person(
     last_name: str = Query(..., description="姓"),
     force_refresh: bool = Query(False),
     db: Session = Depends(get_db),
+    user=Depends(check_email_finding_permission),
 ):
     """
     精确查找特定人员的邮箱

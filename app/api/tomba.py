@@ -13,6 +13,7 @@ from app.services.tomba_service import (
     TOMBA_API_KEY,
     TOMBA_API_SECRET,
 )
+from app.auth import check_email_finding_permission
 
 router = APIRouter(tags=["tomba"])
 
@@ -58,6 +59,7 @@ def api_tomba_domain_search(
     enrich_mobile: bool = Query(False, description="是否获取电话号码"),
     force_refresh: bool = Query(False, description="强制刷新（跳过缓存）"),
     db: Session = Depends(get_db),
+    user=Depends(check_email_finding_permission),
 ):
     """
     Tomba 域名搜索（消耗搜索额度，无结果不扣费）
@@ -157,6 +159,7 @@ def api_tomba_find_person(
     last_name: str = Query(..., description="姓"),
     force_refresh: bool = Query(False),
     db: Session = Depends(get_db),
+    user=Depends(check_email_finding_permission),
 ):
     """
     精确查找特定人员的邮箱（消耗搜索额度，找不到不扣费）

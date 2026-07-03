@@ -87,7 +87,7 @@ class Customer(Base):
 
 
 class User(Base):
-    """用户认证（V4.0 新增）"""
+    """用户认证（V4.0 新增 / V4.1 新增权限字段）"""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -97,6 +97,13 @@ class User(Base):
     is_active = Column(Integer, default=1, comment="是否激活: 1激活/0禁用")
     created_at = Column(DateTime, default=datetime.datetime.utcnow, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, comment="更新时间")
+
+    # V4.1 新增：用户功能权限（管理员在用户管理页可逐用户配置）
+    search_depth_limit = Column(Integer, default=50, comment="每次搜索允许的最大结果数")
+    search_quota = Column(Integer, default=100, comment="搜索次数总配额")
+    searches_used = Column(Integer, default=0, comment="已使用的搜索次数")
+    ai_analysis_enabled = Column(Integer, default=1, comment="是否允许 AI 分析: 1允许/0禁止")
+    email_finding_enabled = Column(Integer, default=1, comment="是否允许邮箱查找: 1允许/0禁止")
 
 
 class SearchTask(Base):

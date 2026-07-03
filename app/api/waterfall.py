@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db, EmailQuotaLog
 from app.services.waterfall_discovery import waterfall_email_discovery
 from app.services.prospeo_service import PROSPEO_API_KEY
+from app.auth import check_email_finding_permission
 
 router = APIRouter(tags=["waterfall"])
 
@@ -17,6 +18,7 @@ router = APIRouter(tags=["waterfall"])
 async def api_waterfall_discovery(
     website: str = Query(..., description="公司网址或域名，如 https://stripe.com"),
     db: Session = Depends(get_db),
+    user=Depends(check_email_finding_permission),
 ):
     """
     瀑布式邮箱发现

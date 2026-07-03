@@ -18,6 +18,7 @@ from app.services.search_task_service import run_search_task, request_task_stop,
 from app.services.keyword_expander import expand_keywords
 from app.services.deduplication import find_existing_customer
 from app.services.google_discovery import set_search_engine, get_search_engine_info
+from app.auth import consume_search_quota, get_search_depth_limit, User
 
 router = APIRouter(tags=["discovery"])
 
@@ -81,8 +82,20 @@ async def create_search_task(
     keyword: str = Query(..., description="搜索关键词"),
     depth: int = Query(50, description="搜索深度"),
     db: Session = Depends(get_db),
+    user: User = Depends(consume_search_quota),
 ):
-    """创建新的搜索发现任务"""
+    """创建新的搜索发现任务（V4.1 按用户限制搜索深度和配额）
+
+    权限控制：
+    - 管理员：消耗 1 次配额，深度不限
+    - 普通用户：消耗 1 次配额，深度受 search_depth_limit 限制
+    - 配额不足时返回 403
+    """
+    # 非管理员受搜索深度限制
+    max_depth = get_search_depth_limit(user)
+    if depth > max_depth:
+        depth = max_depth
+
     task = SearchTask(
         country=country,
         keyword=keyword,
@@ -98,7 +111,7 @@ async def create_search_task(
     loop = asyncio.get_event_loop()
     loop.create_task(_run_task_wrapper(task.id))
 
-    return {"message": "搜索任务已创建", "task_id": task.id}
+    return {"message": "搜索任务已创建", "task_id": task.id, "effective_depth": depth}
 
 
 @router.get("/discovery/tasks")
