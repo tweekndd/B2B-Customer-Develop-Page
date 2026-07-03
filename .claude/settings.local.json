@@ -98,7 +98,23 @@
       "Bash(cat .env.example)",
       "Bash(git reset *)",
       "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from app.templates import *; print\\('Imports OK'\\)\")",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(git checkout *)",
+      "Bash(gh repo *)",
+      "Bash(git clone *)",
+      "Read(//private/tmp/agency-agents-zh/**)",
+      "Read(//private/tmp/agency-agents-zh/scripts/**)",
+      "Bash(bash scripts/install.sh --tool claude-code)",
+      "Bash(pip3 --version)",
+      "WebFetch(domain:unpkg.com)",
+      "Bash(openssl dgst *)",
+      "Bash(openssl base64 *)",
+      "Bash(node *)",
+      "Bash(git restore *)",
+      "Bash(brew install *)",
+      "Bash(sudo apt-get install -y sshpass)",
+      "Bash(sshpass *)",
+      "Bash(git commit -m 'V3.5.0 AI引擎更换：DeepSeek → 智谱 GLM-4.7-Flash（免费） *)"
     ]
   }
 }

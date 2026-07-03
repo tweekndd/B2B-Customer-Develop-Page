@@ -1,0 +1,219 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.bigmodel.cn/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# 快速开始
+
+<Tip>
+  API 文档提供了智谱AI开放平台 RESTful API 的详细信息，您可以通过点击 Try it 按钮直接调试 API。
+</Tip>
+
+智谱开放平台提供标准的 HTTP API 接口，支持多种编程语言和开发环境，同时提供 [SDKs](/cn/guide/develop/python/introduction)。
+
+## API 端点
+
+智谱开放平台的通用 API 端点：
+
+```
+https://open.bigmodel.cn/api/paas/v4
+```
+
+<Warning>
+  使用 [GLM 编码套餐](/cn/coding-plan/overview) 时，需配置专属的 Coding 端点，详情请见[编码套餐快速开始](/cn/coding-plan/quick-start)
+</Warning>
+
+## 身份验证
+
+开放平台 API 使用标准的 **HTTP Bearer** 进行身份验证。
+您可以在 [API Keys 页面](https://bigmodel.cn/usercenter/proj-mgmt/apikeys) 创建或管理密钥。
+
+API 密钥需通过 HTTP 请求头的 Bearer 认证方式提供。
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+<Tip>
+  建议将 API Key 设置为环境变量，避免硬编码到代码中，以提高安全性。
+</Tip>
+
+## 调试工具
+
+API 详情页面右上角提供丰富的 **调用示例**，可点击切换查看不同场景的示例。<br />
+同时提供 API 调试工具，点击 **Try it** 按钮即可快速尝试 API 调用。
+
+* API 详情页面包含多个交互选项，请注意 **切换输入类型下拉框**、**切换标签页** 和 **添加新内容** 等功能。
+* 点击 **Add an item** 或 **Add new property** 可添加 API 所需的更多属性。
+* **注意**: 切换标签页后需要重新输入或设置之前的属性值。
+
+## 调用示例
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash theme={null}
+    curl -X POST "https://open.bigmodel.cn/api/paas/v4/chat/completions" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer YOUR_API_KEY" \
+    -d '{
+        "model": "glm-5.2",
+        "messages": [
+            {
+                "role": "system",
+                "content": "你是一个有用的AI助手。"
+            },
+            {
+                "role": "user",
+                "content": "你好，请介绍一下自己。"
+            }
+        ],
+        "temperature": 1.0,
+        "stream": true
+    }'
+    ```
+  </Tab>
+
+  <Tab title="Python SDK">
+    **安装 SDK**
+
+    ```bash theme={null}
+    # 安装最新版本
+    pip install zai-sdk
+
+    # 或指定版本
+    pip install zai-sdk==0.2.3
+    ```
+
+    **验证安装**
+
+    ```python theme={null}
+    import zai
+    print(zai.__version__)
+    ```
+
+    **使用示例**
+
+    ```python theme={null}
+    from zai import ZhipuAiClient
+
+    # 初始化客户端
+    client = ZhipuAiClient(api_key="YOUR_API_KEY")
+
+    # 创建聊天完成请求
+    response = client.chat.completions.create(
+        model="glm-5.2",
+        messages=[
+            {
+                "role": "system",
+                "content": "你是一个有用的AI助手。"
+            },
+            {
+                "role": "user",
+                "content": "你好，请介绍一下自己。"
+            }
+        ],
+        temperature=0.6
+    )
+
+    # 获取回复
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+
+  <Tab title="Java SDK">
+    **安装 SDK**
+
+    **Maven**
+
+    ```xml theme={null}
+    <dependency>
+        <groupId>ai.z.openapi</groupId>
+        <artifactId>zai-sdk</artifactId>
+        <version>0.3.5</version>
+    </dependency>
+    ```
+
+    **Gradle (Groovy)**
+
+    ```groovy theme={null}
+    implementation 'ai.z.openapi:zai-sdk:0.3.5'
+    ```
+
+    **使用示例**
+
+    ```java theme={null}
+    import ai.z.openapi.ZhipuAiClient;
+    import ai.z.openapi.service.model.*;
+    import java.util.Arrays;
+
+    public class QuickStart {
+        public static void main(String[] args) {
+            // 初始化客户端
+            ZhipuAiClient client = ZhipuAiClient.builder().ofZHIPU()
+                .apiKey("YOUR_API_KEY")
+                .build();
+
+            // 创建聊天完成请求
+            ChatCompletionCreateParams request = ChatCompletionCreateParams.builder()
+                .model("glm-5.2")
+                .messages(Arrays.asList(
+                    ChatMessage.builder()
+                        .role(ChatMessageRole.USER.value())
+                        .content("Hello, who are you?")
+                        .build()
+                ))
+                .stream(false)
+                .temperature(0.6f)
+                .maxTokens(1024)
+                .build();
+
+            // 发送请求
+            ChatCompletionResponse response = client.chat().createChatCompletion(request);
+
+            // 获取回复
+            System.out.println(response.getData().getChoices().get(0).getMessage());
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python SDK(旧)">
+    **安装 SDK**
+
+    ```bash theme={null}
+    # 安装最新版本
+    pip install zhipuai
+
+    # 或指定版本
+    pip install zhipuai==2.1.5.20250726
+    ```
+
+    **验证安装**
+
+    ```python theme={null}
+    import zhipuai
+    print(zhipuai.__version__)
+    ```
+
+    **使用示例**
+
+    ```python theme={null}
+    from zhipuai import ZhipuAI
+
+    client = ZhipuAI(api_key="YOUR_API_KEY")
+    response = client.chat.completions.create(
+        model="glm-5.2",
+        messages=[
+            {
+                "role": "system",
+                "content": "你是一个有用的AI助手。"
+            },
+            {
+                "role": "user",
+                "content": "你好，请介绍一下自己。"
+            }
+        ]
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+</Tabs>

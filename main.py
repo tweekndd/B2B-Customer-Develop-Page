@@ -1,6 +1,6 @@
 """
-AI Trade Customer Analyzer V3.2.6 - 主程序入口
-V4.0: 新增用户系统 — 访客只读 + 用户登录 + 管理员后台
+AI Trade Customer Analyzer V3.5.0 - 主程序入口
+V3.5.0: 更换AI引擎为智谱GLM-4.7-Flash（免费）
 客户发现 + 客户分析 + 客户数据库平台
 """
 import os
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         print(f"  初始化跳过: {e}")
 
     print("=" * 50)
-    print("  AI Trade Customer Analyzer V3.2.6")
+    print("  AI Trade Customer Analyzer V3.5.0")
     print(" 客户发现 + AI分析 + 客户数据库 + Hunter + Prospeo 邮箱 + 地图 + Firecrawl 降级")
     print("=" * 50)
     print(" 访问地址: http://localhost:8000")
@@ -59,9 +59,9 @@ _jinja_env = Environment(
 templates = Jinja2Templates(env=_jinja_env)
 
 app = FastAPI(
-    title="AI Trade Customer Analyzer V3.2.6",
-    description="客户发现 + AI分析 + 客户数据库 + Hunter 邮箱查找 + Prospeo 邮箱发现 + 城市级地图 + Firecrawl 降级 — V4.0 用户系统",
-    version="3.2.6",
+    title="AI Trade Customer Analyzer V3.5.0",
+    description="客户发现 + AI分析 + 客户数据库 + Hunter 邮箱查找 + Prospeo 邮箱发现 + 城市级地图 + Firecrawl 降级 — V3.5.0 GLM免费AI引擎",
+    version="3.5.0",
     lifespan=lifespan,
 )
 

@@ -1,8 +1,8 @@
 """
-DeepSeek AI分析服务
-调用DeepSeek API分析客户官网文本
+GLM AI分析服务
+调用智谱 GLM API分析客户官网文本
 生成客户类型、采购概率、开发切入点等分析结果
-API Key 通过环境变量 DEEPSEEK_API_KEY 传入
+API Key 通过环境变量 GLM_API_KEY 传入
 """
 import os
 import json
@@ -10,12 +10,17 @@ from typing import Optional, Dict, Any
 import httpx
 
 
-# DeepSeek API配置
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-DEEPSEEK_API_URL = os.environ.get(
-    "DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions"
+# GLM API配置
+GLM_API_KEY = os.environ.get("GLM_API_KEY", "")
+GLM_API_URL = os.environ.get(
+    "GLM_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 )
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4.7-flash")
+
+
+# 向后兼容：如果未设置 GLM_API_KEY，尝试读取旧的 DEEPSEEK_API_KEY
+if not GLM_API_KEY:
+    GLM_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 
 def _build_prompt(website_text: str) -> str:
@@ -42,15 +47,15 @@ def _build_prompt(website_text: str) -> str:
 
 
 async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
-    """调用DeepSeek API分析公司，返回解析后的JSON字典"""
-    if not DEEPSEEK_API_KEY:
-        print("未设置DEEPSEEK_API_KEY环境变量，跳过AI分析")
+    """调用GLM API分析公司，返回解析后的JSON字典"""
+    if not GLM_API_KEY:
+        print("未设置GLM_API_KEY（或DEEPSEEK_API_KEY）环境变量，跳过AI分析")
         return None
 
     prompt = _build_prompt(website_text)
 
     payload = {
-        "model": DEEPSEEK_MODEL,
+        "model": GLM_MODEL,
         "messages": [
             {
                 "role": "system",
@@ -63,14 +68,14 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
     }
 
     headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {GLM_API_KEY}",
         "Content-Type": "application/json",
     }
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
-                DEEPSEEK_API_URL, headers=headers, json=payload
+                GLM_API_URL, headers=headers, json=payload
             )
             response.raise_for_status()
             result = response.json()
@@ -79,13 +84,13 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
             return _parse_ai_response(ai_content)
 
     except httpx.TimeoutException:
-        print("DeepSeek API 请求超时")
+        print("GLM API 请求超时")
         return None
     except httpx.HTTPStatusError as e:
-        print(f"DeepSeek API HTTP错误: {e.response.status_code}")
+        print(f"GLM API HTTP错误: {e.response.status_code}")
         return None
     except Exception as e:
-        print(f"DeepSeek API 调用异常: {str(e)}")
+        print(f"GLM API 调用异常: {str(e)}")
         return None
 
 

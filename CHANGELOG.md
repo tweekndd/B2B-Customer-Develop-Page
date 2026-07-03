@@ -1,5 +1,36 @@
 # 更新日志
 
+## v3.5.0（2026-07-03）
+
+### 🔄 AI 引擎更换：DeepSeek → 智谱 GLM-4.7-Flash（免费）
+
+**问题**：DeepSeek API 为付费服务，且 `deepseek-v4-flash` 模型已不推荐使用，继续使用会增加项目运行成本。
+
+**方案**：将底层 AI 引擎从 DeepSeek 更换为智谱 GLM-4.7-Flash（免费文本旗舰模型），同时保持 API 调用结构不变。
+
+| 项目 | 旧值 | 新值 |
+|:-----|:-----|:-----|
+| **API 端点** | `https://api.deepseek.com/v1/chat/completions` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` |
+| **模型** | `deepseek-v4-flash` | `glm-4.7-flash`（免费） |
+| **环境变量** | `DEEPSEEK_API_KEY` | `GLM_API_KEY`（向后兼容旧变量） |
+| **费用** | 付费 | **免费** |
+
+**向后兼容**：系统自动检测 `GLM_API_KEY`，若未设置则尝试读取旧的 `DEEPSEEK_API_KEY`，用户无需修改任何配置即可无缝切换。
+
+**新增文件**：
+- `app/services/glm_analyzer.py` — GLM AI 分析服务（替代 `deepseek_analyzer.py`）
+
+**修改文件**：
+- `app/services/deepseek_analyzer.py` → **删除**，由 `glm_analyzer.py` 替代
+- `app/services/keyword_expander.py` — API URL/模型名/变量名更新为 GLM
+- `app/services/similar_company_finder.py` — 2 处 LLM 调用均切换到 GLM
+- `app/services/search_task_service.py` — import 路径更新
+- `app/api/customers.py` — import 路径更新
+- `app/templates/users.html` — UI 文案更新
+- `README.md` / `AGENTS.md` — 文档全面更新
+
+---
+
 ## v3.2.6（2026-06-30）
 
 ### 🔥 Firecrawl 智能降级 — 三层兜底 + 性价比最优

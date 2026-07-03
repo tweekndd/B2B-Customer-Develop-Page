@@ -10,11 +10,15 @@ import httpx
 from app.services.country_language_map import get_language_info
 
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-DEEPSEEK_API_URL = os.environ.get(
-    "DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions"
+GLM_API_KEY = os.environ.get("GLM_API_KEY", "")
+GLM_API_URL = os.environ.get(
+    "GLM_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 )
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4.7-flash")
+
+# 向后兼容：如果未设置 GLM_API_KEY，尝试读取旧的 DEEPSEEK_API_KEY
+if not GLM_API_KEY:
+    GLM_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 
 async def expand_keywords(
@@ -22,13 +26,13 @@ async def expand_keywords(
     country: str = "",
 ) -> Optional[List[str]]:
     """
-    调用DeepSeek将基础关键词扩展为10~20个相关关键词
+    调用GLM将基础关键词扩展为10~20个相关关键词
     如果指定了国家，会使用该国家的本地语言进行扩展（翻译+扩展一次完成）
     用于Google搜索发现客户
     返回关键词列表
     """
-    if not DEEPSEEK_API_KEY:
-        print("未设置DEEPSEEK_API_KEY，无法扩展关键词")
+    if not GLM_API_KEY:
+        print("未设置GLM_API_KEY（或DEEPSEEK_API_KEY），无法扩展关键词")
         return [base_keyword]
 
     # 获取目标国家的语言信息
@@ -83,7 +87,7 @@ async def expand_keywords(
         system_prompt = "你是一个专业的B2B营销关键词扩展专家。返回严格的JSON数组格式。"
 
     payload = {
-        "model": DEEPSEEK_MODEL,
+        "model": GLM_MODEL,
         "messages": [
             {
                 "role": "system",
@@ -96,14 +100,14 @@ async def expand_keywords(
     }
 
     headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {GLM_API_KEY}",
         "Content-Type": "application/json",
     }
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                DEEPSEEK_API_URL, headers=headers, json=payload
+                GLM_API_URL, headers=headers, json=payload
             )
             response.raise_for_status()
             result = response.json()

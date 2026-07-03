@@ -6,7 +6,7 @@ A FastAPI web application for foreign trade customer discovery, AI analysis, sco
 
 ```bash
 pip install -r requirements.txt
-set DEEPSEEK_API_KEY=sk-xxx
+set GLM_API_KEY=your-glm-api-key
 set SERPAPI_API_KEY=xxx       # or TAVILY_API_KEY
 python main.py                # → http://localhost:8000
 ```
@@ -60,7 +60,7 @@ Key service responsibilities and data flow:
    - `website_scraper.py` → scrape /about /services etc.
    - `email_extractor.py` → extract target-prefix emails
    - `keyword_analyzer.py` → hit positive/negative keywords
-   - `deepseek_analyzer.py` → AI analysis (company type, hook, etc.)
+   - `glm_analyzer.py` → AI analysis (company type, hook, etc.)
    - `scoring_engine.py` → 5-dimension rule-based scoring
 
 2. **Email Discovery**: `waterfall_discovery.py` cascades:
@@ -96,7 +96,7 @@ Two JSON config files in `app/services/`:
 
 | API | Env var | Free tier | Notes |
 |-----|---------|-----------|-------|
-| DeepSeek | `DEEPSEEK_API_KEY` | Paid | AI analysis + keyword expansion. Model: `deepseek-v4-flash` |
+| 智谱 GLM | `GLM_API_KEY` | Free | AI analysis + keyword expansion. Model: `glm-4.7-flash` (free flagship text model). Compatible with old `DEEPSEEK_API_KEY` |
 | SerpAPI | `SERPAPI_API_KEY` | 250/mo | Google search |
 | Tavily | `TAVILY_API_KEY` | 1000/mo | Web search (preferred if both configured) |
 | Hunter.io | `HUNTER_API_KEY` | 25/mo | Email domain search |

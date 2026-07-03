@@ -1,4 +1,4 @@
-# AI Trade Customer Analyzer V3.2.6
+# AI Trade Customer Analyzer V3.5.0
 
 **外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Firecrawl 智能降级
 
@@ -16,7 +16,7 @@
 | **Firecrawl 降级** | 免费爬虫失败时自动降级到 Firecrawl（JS 渲染 / 反爬兜底）：首页GET失败→1 credit Scrape，HEAD<50%→~10 credits Crawl，内容<200字符→~10 credits Crawl |
 | **邮箱提取** | 自动提取 info / sales / contact / procurement / project / marketing 前缀邮箱 |
 | **关键词分析** | 14个正向 + 7个负向行业关键词命中统计（从配置文件加载，可运行时编辑） |
-| **DeepSeek AI分析** | 识别公司类型、分析原因、生成开发切入点和推荐联系职位 |
+| **GLM AI分析** | 识别公司类型、分析原因、生成开发切入点和推荐联系职位 |
 | **规则评分引擎** | 5个维度评分：行业匹配度(30) + 项目匹配度(25) + 公司类型(20) + 国家优先级(15) + 联系方式(10)，可运行时配置 |
 | **Hunter 邮箱查找** | 通过 Hunter.io API 查找公司内部联系人的工作邮箱。支持域名搜索、姓名精确查找、部门/级别筛选，含5层配额优化策略（缓存优先/Count预检/自带验证/智能降级/请求间隔控制） |
 | **Tomba 邮箱查找** | 通过 Tomba.io API 查找邮箱，返回数据更丰富（含领英、电话、部门、置信度评分）。无结果不扣费 |
@@ -50,9 +50,10 @@ pip install -r requirements.txt
 
 ### 3. 获取 API Key
 
-#### DeepSeek API（必填，用于 AI 分析和关键词扩展）
-- 前往 https://platform.deepseek.com/ 注册获取 API Key
-- 模型默认使用 `deepseek-v4-flash`
+#### GLM API（必填，用于 AI 分析和关键词扩展）
+- 前往 https://bigmodel.cn/ 注册获取 API Key（智谱开放平台）
+- 模型默认使用 `glm-4.7-flash`（免费，文本旗舰模型）
+- 也兼容旧环境变量 `DEEPSEEK_API_KEY`（自动向后兼容）
 
 #### SerpAPI（搜索发现功能必填之一）
 - 前往 https://serpapi.com/ 注册获取 API Key
@@ -88,11 +89,11 @@ pip install -r requirements.txt
 
 ### 4. 启动系统
 
-以下为完整配置示例（包含全部可选 API Key）。最少只需配置 `DEEPSEEK_API_KEY` + 任一搜索引擎（`SERPAPI_API_KEY` 或 `TAVILY_API_KEY`）即可启动，其余为可选功能。
+以下为完整配置示例（包含全部可选 API Key）。最少只需配置 `GLM_API_KEY` + 任一搜索引擎（`SERPAPI_API_KEY` 或 `TAVILY_API_KEY`）即可启动，其余为可选功能。旧 `DEEPSEEK_API_KEY` 环境变量会自动兼容。
 
 **Windows (CMD):**
 ```cmd
-set DEEPSEEK_API_KEY=sk-your-deepseek-api-key
+set GLM_API_KEY=your-glm-api-key
 set SERPAPI_API_KEY=your-serpapi-api-key
 set TAVILY_API_KEY=tvly-your-tavily-api-key
 set HUNTER_API_KEY=your-hunter-api-key
@@ -105,7 +106,7 @@ python main.py
 
 **macOS / Linux:**
 ```bash
-export DEEPSEEK_API_KEY=sk-your-deepseek-api-key
+export GLM_API_KEY=your-glm-api-key
 export SERPAPI_API_KEY=your-serpapi-api-key
 export TAVILY_API_KEY=tvly-your-tavily-api-key
 export HUNTER_API_KEY=your-hunter-api-key
@@ -118,7 +119,7 @@ python main.py
 
 **PowerShell:**
 ```powershell
-$env:DEEPSEEK_API_KEY="sk-your-deepseek-api-key"
+$env:GLM_API_KEY="your-glm-api-key"
 $env:SERPAPI_API_KEY="your-serpapi-api-key"
 $env:TAVILY_API_KEY="tvly-your-tavily-api-key"
 $env:HUNTER_API_KEY="your-hunter-api-key"
@@ -133,8 +134,9 @@ python main.py
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `DEEPSEEK_API_URL` | `https://api.deepseek.com/v1/chat/completions` | 自定义 API 地址 |
-| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | 自定义模型名称 |
+| `GLM_API_KEY` | — | 智谱 GLM API Key（必填，也兼容旧的 `DEEPSEEK_API_KEY`）|
+| `GLM_API_URL` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | 自定义 API 地址 |
+| `GLM_MODEL` | `glm-4.7-flash` | 自定义模型名称（推荐使用免费文本旗舰模型）|
 | `SERPAPI_API_KEY` | — | SerpAPI 密钥（二选一） |
 | `TAVILY_API_KEY` | — | Tavily 密钥（二选一） |
 | `SEARCH_ENGINE` | 自动检测 | 强制指定搜索引擎：`serpapi` 或 `tavily`；运行时可通过前端切换 |
@@ -235,7 +237,7 @@ python main.py
 
 ```
 AI-Trade-Customer-Analyzer/
-├── main.py                          # FastAPI 主入口（V3.2.6）
+├── main.py                          # FastAPI 主入口（V3.5.0）
 ├── 产品评审报告-V2.7.md              # 产品评审报告
 ├── requirements.txt                 # 依赖清单
 ├── sync.sh                          # 一键同步脚本
@@ -259,7 +261,7 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── email_extractor.py       # 邮箱提取
 │   │   ├── keyword_analyzer.py      # 关键词分析（从配置文件加载）
 │   │   ├── keyword_expander.py      # AI 关键词扩展（多语言支持）
-│   │   ├── deepseek_analyzer.py     # DeepSeek AI 分析
+│   │   ├── glm_analyzer.py            # GLM AI 分析
 │   │   ├── scoring_engine.py        # 规则评分引擎（缓存化）
 │   │   ├── google_discovery.py      # SerpAPI / Tavily 搜索（运行时切换）
 │   │   ├── tavily_discovery.py      # Tavily 搜索客户端
@@ -386,7 +388,7 @@ pytest tests/ -q     # 简洁输出
 
 - **后端**：FastAPI + SQLAlchemy + SQLite/PostgreSQL
 - **前端**：Bootstrap 5 + JavaScript 模块化（utils/index/detail/discovery/config/hunter/map）
-- **AI**：DeepSeek API
+- **AI**：智谱 GLM (glm-4.7-flash 文本旗舰模型，免费)
 - **搜索**：SerpAPI / Tavily（运行时一键切换）
 - **邮箱**：Hunter.io + Tomba.io + Prospeo.io + 官网抓取兜底（瀑布式四级级联）
 - **爬虫**：httpx + BeautifulSoup（异步并发，多阶段 URL 发现）

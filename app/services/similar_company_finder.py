@@ -71,11 +71,15 @@ async def _translate_to_local_language(
     products = business_info.get("products", [])
     keywords = business_info.get("keywords", [])
 
-    deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    deepseek_url = os.environ.get(
-        "DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions"
+    glm_key = os.environ.get("GLM_API_KEY", "")
+    glm_url = os.environ.get(
+        "GLM_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     )
-    deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    glm_model = os.environ.get("GLM_MODEL", "glm-4.7-flash")
+
+    # 向后兼容：如果未设置 GLM_API_KEY，尝试读取旧的 DEEPSEEK_API_KEY
+    if not glm_key:
+        glm_key = os.environ.get("DEEPSEEK_API_KEY", "")
 
     prompt = f"""你是一个专业的B2B外贸翻译专家。请将以下与公司业务相关的英文内容翻译成{language_name}。
 
@@ -106,7 +110,7 @@ async def _translate_to_local_language(
 只返回JSON，不要包含其他文字。"""
 
     payload = {
-        "model": deepseek_model,
+        "model": glm_model,
         "messages": [
             {"role": "system", "content": f"你是一个专业的B2B外贸翻译专家，精通{language_name}和行业术语。只返回JSON格式数据。"},
             {"role": "user", "content": prompt},
@@ -116,13 +120,13 @@ async def _translate_to_local_language(
     }
 
     headers = {
-        "Authorization": f"Bearer {deepseek_key}",
+        "Authorization": f"Bearer {glm_key}",
         "Content-Type": "application/json",
     }
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(deepseek_url, headers=headers, json=payload)
+            response = await client.post(glm_url, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
             content = result["choices"][0]["message"]["content"]
@@ -208,12 +212,16 @@ async def extract_business_info(company_url: str) -> Optional[Dict]:
     # 取前3000字符交给 LLM 分析
     content_for_llm = website_text[:3000]
 
-    # 调用 DeepSeek 提取业务信息
-    deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    deepseek_url = os.environ.get(
-        "DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions"
+    # 调用 GLM 提取业务信息
+    glm_key_2 = os.environ.get("GLM_API_KEY", "")
+    glm_url_2 = os.environ.get(
+        "GLM_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     )
-    deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    glm_model_2 = os.environ.get("GLM_MODEL", "glm-4.7-flash")
+
+    # 向后兼容：如果未设置 GLM_API_KEY，尝试读取旧的 DEEPSEEK_API_KEY
+    if not glm_key_2:
+        glm_key_2 = os.environ.get("DEEPSEEK_API_KEY", "")
 
     prompt = f"""分析以下公司网页内容，提取业务信息。返回严格的JSON格式（不要包含其他文字）：
 
@@ -231,7 +239,7 @@ async def extract_business_info(company_url: str) -> Optional[Dict]:
 只返回JSON，不要包含其他文字。"""
 
     payload = {
-        "model": deepseek_model,
+        "model": glm_model_2,
         "messages": [
             {"role": "system", "content": "你是一个专业的B2B客户分析专家。根据公司网站内容提取业务信息。只返回JSON格式数据。"},
             {"role": "user", "content": prompt},
@@ -241,13 +249,13 @@ async def extract_business_info(company_url: str) -> Optional[Dict]:
     }
 
     headers = {
-        "Authorization": f"Bearer {deepseek_key}",
+        "Authorization": f"Bearer {glm_key_2}",
         "Content-Type": "application/json",
     }
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(deepseek_url, headers=headers, json=payload)
+            response = await client.post(glm_url_2, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
             content = result["choices"][0]["message"]["content"]

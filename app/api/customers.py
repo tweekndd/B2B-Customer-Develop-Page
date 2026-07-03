@@ -17,7 +17,7 @@ from app.services.excel_importer import parse_excel, import_customers
 from app.services.website_scraper import scrape_website
 from app.services.email_extractor import extract_emails_from_text
 from app.services.keyword_analyzer import analyze_keywords
-from app.services.deepseek_analyzer import analyze_company, generate_summary
+from app.services.glm_analyzer import analyze_company, generate_summary
 from app.services.scoring_engine import calculate_scores
 from app.services.search_task_service import request_stop
 from app.auth import check_ai_analysis_permission
