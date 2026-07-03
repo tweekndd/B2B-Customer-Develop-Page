@@ -87,10 +87,16 @@ async def analyze_company(website_text: str) -> Optional[Dict[str, Any]]:
         print("GLM API 请求超时")
         return None
     except httpx.HTTPStatusError as e:
-        print(f"GLM API HTTP错误: {e.response.status_code}")
+        reason = ""
+        try:
+            body = e.response.json()
+            reason = body.get("error", {}).get("message", "")
+        except Exception:
+            reason = e.response.text[:100]
+        print(f"GLM API HTTP错误: {e.response.status_code} - {reason}")
         return None
     except Exception as e:
-        print(f"GLM API 调用异常: {str(e)}")
+        print(f"GLM API 调用异常: {type(e).__name__}: {str(e)[:200]}")
         return None
 
 

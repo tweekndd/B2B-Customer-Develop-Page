@@ -115,8 +115,17 @@ async def expand_keywords(
             content = result["choices"][0]["message"]["content"]
             return _parse_keyword_list(content)
 
+    except httpx.HTTPStatusError as e:
+        reason = ""
+        try:
+            body = e.response.json()
+            reason = body.get("error", {}).get("message", "")
+        except Exception:
+            reason = e.response.text[:100]
+        print(f"关键词扩展HTTP错误: {e.response.status_code} - {reason}")
+        return [base_keyword]
     except Exception as e:
-        print(f"关键词扩展API调用失败: {str(e)[:100]}")
+        print(f"关键词扩展API调用异常: {type(e).__name__}: {str(e)[:200]}")
         return [base_keyword]
 
 
