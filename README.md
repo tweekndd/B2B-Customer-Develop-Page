@@ -1,8 +1,8 @@
 # AI Trade Customer Analyzer V4.1
 
-**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Firecrawl 智能降级 + GLM 模型自动降级
+**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Reader (Jina AI) 免费爬虫降级 + GLM 模型自动降级
 
-自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。多用户共享数据库，支持管理员对每个用户的搜索配额、搜索深度、AI分析权限、邮箱查找权限进行精细化管控。
+自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。爬虫降级使用 Jina AI Reader（`r.jina.ai`）**完全免费、无需 API Key**。多用户共享数据库，支持管理员对每个用户的搜索配额、搜索深度、AI分析权限、邮箱查找权限进行精细化管控。
 
 ---
 
@@ -12,8 +12,8 @@
 |------|------|
 | **客户发现** | 输入国家 + 关键词 → AI扩展关键词 → SerpAPI/Tavily搜索Google → 自动过滤企业官网 |
 | **Excel导入** | 上传含 Company Name / Website / Country 三列的 Excel 文件 |
-| **官网抓取 V2** | 三阶段 URL 发现（33 条 HEAD 预检 + 智能链接发现 + 异步并发 GET），带 Firecrawl 三层智能降级 |
-| **Firecrawl 降级** | 免费爬虫失败时自动降级到 Firecrawl（JS 渲染 / 反爬兜底）：首页GET失败→1 credit Scrape，HEAD<50%→~10 credits Crawl，内容<200字符→~10 credits Crawl |
+| **官网抓取 V2** | 三阶段 URL 发现（33 条 HEAD 预检 + 智能链接发现 + 异步并发 GET），带 Reader (Jina AI) 免费降级兜底 |
+| **Reader (Jina AI) 爬虫降级** | 三层降级统一使用免费的 r.jina.ai API 将 URL 转为 Markdown，零成本无需 API Key。支持 JS 渲染兜底。可自托管 Docker 镜像彻底消除外部依赖 |
 | **邮箱提取** | 自动提取 info / sales / contact / procurement / project / marketing 前缀邮箱 |
 | **关键词分析** | 14个正向 + 7个负向行业关键词命中统计（从配置文件加载，可运行时编辑） |
 | **GLM AI分析** | 识别公司类型、分析原因、生成开发切入点和推荐联系职位 |
@@ -66,12 +66,19 @@ pip install -r requirements.txt
 - 前往 https://www.tavily.com/ 注册获取 API Key
 - 免费账户每月 1000 次搜索查询
 
-#### Firecrawl（可选，网站爬虫降级兜底）
+#### Jina AI Reader（推荐，网站爬虫降级兜底 — **免费、零配置**）
+爬虫降级已默认使用 [Jina AI Reader](https://r.jina.ai/)（`r.jina.ai`），将任意 URL 转为 LLM 友好的 Markdown：
+- **完全免费** — 官方宣称可用于生产环境，无需 API Key
+- **无需配置** — 没有环境变量也能直接用
+- **支持 JS 渲染** — 通过 `READER_ENGINE=browser` 启用 headless Chrome
+- **可自托管** — `docker pull ghcr.io/jina-ai/reader:oss` 彻底消除外部依赖
+
+> 如果希望保留旧版 Firecrawl 作为最后兜底，可继续设置 `FIRECRAWL_API_KEY`，Reader 失败时会自动回退到 Firecrawl。
+
+#### Firecrawl（可选，Reader 失败时的最后兜底） — 已不再必需
 - 前往 https://www.firecrawl.dev/ 注册获取 API Key
 - 免费套餐每月 1000 credits，**无需绑卡**
-- Scrape API：1 credit/页（`formats=["markdown"]` 成本最低）
-- Crawl API：按页面数计费（~10 credits/站）
-- 三层降级：仅免费爬虫失败时触发，80% 网站消耗 0 credits
+- 仅在 Reader 抓取失败且有 `FIRECRAWL_API_KEY` 环境变量时触发
 
 #### Hunter.io（邮箱查找功能，可选）
 - 前往 https://hunter.io/api-keys 注册获取 API Key
@@ -116,7 +123,6 @@ set HUNTER_API_KEY=your-hunter-api-key
 set TOMBA_API_KEY=ta-your-tomba-key
 set TOMBA_API_SECRET=ts-your-tomba-secret
 set PROSPEO_API_KEY=your-prospeo-api-key
-set FIRECRAWL_API_KEY=fc-your-firecrawl-key
 python main.py
 ```
 
@@ -131,7 +137,6 @@ export HUNTER_API_KEY=your-hunter-api-key
 export TOMBA_API_KEY=ta-your-tomba-key
 export TOMBA_API_SECRET=ts-your-tomba-secret
 export PROSPEO_API_KEY=your-prospeo-api-key
-export FIRECRAWL_API_KEY=fc-your-firecrawl-key
 python main.py
 ```
 
@@ -146,7 +151,6 @@ $env:HUNTER_API_KEY="your-hunter-api-key"
 $env:TOMBA_API_KEY="ta-your-tomba-key"
 $env:TOMBA_API_SECRET="ts-your-tomba-secret"
 $env:PROSPEO_API_KEY="your-prospeo-api-key"
-$env:FIRECRAWL_API_KEY="fc-your-firecrawl-key"
 python main.py
 ```
 
@@ -174,7 +178,9 @@ python main.py
 | `PROSPEO_API_KEY` | — | Prospeo.io API Key |
 | `PROSPEO_CACHE_TTL` | `604800` (7天) | Prospeo 查询缓存 TTL |
 | `PROSPEO_REQUEST_DELAY` | `0.5` | Prospeo API 请求间隔秒数 |
-| `FIRECRAWL_API_KEY` | — | Firecrawl API Key（免费爬虫降级兜底） |
+| `READER_BASE_URL` | `https://r.jina.ai` | Jina AI Reader API 地址（自托管时改为 `http://localhost:3000`） |
+| `READER_ENGINE` | `auto` | Reader 抓取引擎：`auto` / `browser`（JS 渲染）/ `curl`（轻量） |
+| `FIRECRAWL_API_KEY` | — | （可选旧版兜底）Reader 失败时回退到 Firecrawl |
 | `EMAIL_DISCOVERY_MIN_RESULTS` | `2` | 瀑布式邮箱发现：结果数低于此值才触发下一级 |
 | `EMAIL_DISCOVERY_ENABLE_SCRAPING` | `true` | 瀑布式邮箱发现：是否启用官网抓取兜底 |
 | `SCRAPE_VERIFY_SSL` | `false` | 官网爬虫是否验证 SSL 证书 |
@@ -227,7 +233,7 @@ python main.py
    - **Search Depth**：搜索深度（每个关键词获取的结果数，建议 30-50）
 3. 可选：在「预览扩展关键词」行右侧切换 **搜索 API**（Tavily / SerpAPI）
 4. 点击 **Start Search**
-5. 系统自动完成：AI扩展关键词 → 搜索Google → 过滤官网 → 去重 → 官网抓取（含 Firecrawl 自动降级）→ AI分析 → 规则评分 → 保存入库
+5. 系统自动完成：AI扩展关键词 → 搜索Google → 过滤官网 → 去重 → 官网抓取（含 Reader 免费降级兜底）→ AI分析 → 规则评分 → 保存入库
 6. 在 **客户列表** 页查看结果
 
 ### 查看详情
@@ -302,8 +308,8 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── users.py                 # 用户管理 API（V4.0/V4.1 权限设置）
 │   │   └── geocode.py               # 地理编码 API（后台任务模式）
 │   ├── services/
-│   │   ├── firecrawl_service.py     # Firecrawl 爬虫降级服务（scrape_url 单页抓取，1 credit/次）
-│   │   ├── website_scraper.py       # 官网抓取 V2（多阶段 URL 发现 + Firecrawl 三层降级）
+│   │   ├── firecrawl_service.py     # 爬虫降级服务：Reader (r.jina.ai) 免费降级 + 可选 Firecrawl 兜底
+│   │   ├── website_scraper.py       # 官网抓取 V2（多阶段 URL 发现 + Reader/Firecrawl 三层降级）
 │   │   ├── email_extractor.py       # 邮箱提取
 │   │   ├── keyword_analyzer.py      # 关键词分析（从配置文件加载）
 │   │   ├── keyword_expander.py      # AI 关键词扩展（多语言支持，含模型降级）
@@ -442,7 +448,7 @@ pytest tests/ -q     # 简洁输出
 - **搜索**：SerpAPI / Tavily（运行时一键切换）
 - **邮箱**：Hunter.io + Tomba.io + Prospeo.io + 官网抓取兜底（瀑布式四级级联）
 - **爬虫**：httpx + BeautifulSoup（异步并发，多阶段 URL 发现）
-- **爬虫降级**：Firecrawl（三层兜底，JS 渲染/反爬网站兜底，免费 1000 credits/月）
+- **爬虫降级**：Jina AI Reader（`r.jina.ai`，完全免费零配置，支持自托管 Docker 镜像） + 可选旧版 Firecrawl 兜底
 - **地图**：Leaflet.js + MarkerCluster + Nominatim 地理编码
 - **缓存**：本地 SQLite 多级缓存（搜索/官网/AI分析/邮箱/地理编码）
 - **认证**：Session + bcrypt 密码哈希（V4.0 多用户 / V4.1 精细权限控制）
