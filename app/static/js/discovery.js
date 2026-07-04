@@ -283,7 +283,7 @@ function _renderTaskTable(data) {
             <td>
                 <button class="btn btn-icon btn-outline-secondary" onclick="showTaskLog(${t.id})" title="查看日志"><i class="bi bi-journal-text"></i></button>
                 ${t.status === 'Paused' ? `<button class="btn btn-icon btn-outline-success ms-1" onclick="resumeTask(${t.id})" title="恢复"><i class="bi bi-play-fill"></i></button>` : ''}
-                ${t.status === 'Completed' || t.status === 'Failed' ? `<button class="btn btn-icon btn-outline-danger ms-1" onclick="deleteTask(${t.id})" title="删除"><i class="bi bi-trash"></i></button>` : ''}
+                ${t.status === 'Completed' || t.status === 'Failed' || t.status === 'Paused' ? `<button class="btn btn-icon btn-outline-danger ms-1" onclick="deleteTask(${t.id})" title="删除"><i class="bi bi-trash"></i></button>` : ''}
             </td>
         </tr>`;
     });
