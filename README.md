@@ -1,8 +1,8 @@
-# AI Trade Customer Analyzer V3.5.0
+# AI Trade Customer Analyzer V4.1
 
-**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Firecrawl 智能降级
+**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Firecrawl 智能降级 + GLM 模型自动降级
 
-自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。
+自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。多用户共享数据库，支持管理员对每个用户的搜索配额、搜索深度、AI分析权限、邮箱查找权限进行精细化管控。
 
 ---
 
@@ -27,10 +27,13 @@
 | **智能去重** | 域名 + 标准化公司名双重去重，自动合并重复发现的关键词 |
 | **三级缓存** | 搜索缓存(30天) + 官网缓存(7天) + AI分析缓存(内容哈希) — 避免重复消耗 API 配额 |
 | **断点续跑** | 搜索任务意外中断后，重新启动自动从断点继续 |
+| **用户系统 V4.1** | 多用户登录 + 角色管理（admin/user），管理员可创建/删除用户 |
+| **权限控制 V4.1** | 逐用户管理：搜索深度上限、搜索配额、AI分析开关、邮箱查找开关，管理员不受限制 |
 | **批量分析** | 一键分析所有未分析客户 |
-| **数据同步** | 多设备间同步数据（通过 iCloud/Dropbox/USB），自动去重合并 |
+| **数据同步** | 多设备间同步数据（通过 Google Drive/AirDrop/iCloud/USB），自动去重合并 |
 | **导出Excel** | 导出完整分析报告 |
 | **搜索引擎切换** | 运行时一键切换 Tavily / SerpAPI 搜索后端，无需重启 |
+| **GLM 模型降级** | 首选模型超时/限流/空内容时自动降级到备用模型（`glm-4.7-flash` → `glm-4-flash-250414`） |
 
 ---
 
@@ -87,12 +90,25 @@ pip install -r requirements.txt
 - Enrich Person：1 积分/邮箱（含个人+公司完整资料）
 - 90 天内同一人重复 Enrich 免费，无结果不扣费
 
-### 4. 启动系统
+### 4. 配置管理员账号
 
-以下为完整配置示例（包含全部可选 API Key）。最少只需配置 `GLM_API_KEY` + 任一搜索引擎（`SERPAPI_API_KEY` 或 `TAVILY_API_KEY`）即可启动，其余为可选功能。旧 `DEEPSEEK_API_KEY` 环境变量会自动兼容。
+系统 V4.0 起引入了用户认证。**首次启动前必须设置管理员账号**，否则系统会提示登录且无管理账号可用：
+
+```bash
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=your-secure-password
+```
+
+> 设置后启动系统，管理员账号会自动创建。之后可通过「用户管理」页面新增普通用户，并分配各自的搜索配额和功能权限。
+
+### 5. 启动系统
+
+以下为完整配置示例（包含全部可选 API Key）。**必须**配置 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建管理员账号，以及 `GLM_API_KEY` + 任一搜索引擎（`SERPAPI_API_KEY` 或 `TAVILY_API_KEY`）即可启动，其余为可选功能。旧 `DEEPSEEK_API_KEY` 环境变量会自动兼容。
 
 **Windows (CMD):**
 ```cmd
+set ADMIN_USERNAME=admin
+set ADMIN_PASSWORD=your-secure-password
 set GLM_API_KEY=your-glm-api-key
 set SERPAPI_API_KEY=your-serpapi-api-key
 set TAVILY_API_KEY=tvly-your-tavily-api-key
@@ -106,6 +122,8 @@ python main.py
 
 **macOS / Linux:**
 ```bash
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=your-secure-password
 export GLM_API_KEY=your-glm-api-key
 export SERPAPI_API_KEY=your-serpapi-api-key
 export TAVILY_API_KEY=tvly-your-tavily-api-key
@@ -119,6 +137,8 @@ python main.py
 
 **PowerShell:**
 ```powershell
+$env:ADMIN_USERNAME="admin"
+$env:ADMIN_PASSWORD="your-secure-password"
 $env:GLM_API_KEY="your-glm-api-key"
 $env:SERPAPI_API_KEY="your-serpapi-api-key"
 $env:TAVILY_API_KEY="tvly-your-tavily-api-key"
@@ -134,9 +154,13 @@ python main.py
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
+| `ADMIN_USERNAME` | — | 管理员用户名（**必须**，V4.0 首次启动自动创建管理员） |
+| `ADMIN_PASSWORD` | — | 管理员密码（**必须**） |
+| `SESSION_SECRET` | `customer-analyzer-session-secret-change-me` | Session 加密密钥，生产环境务必修改为随机字符串 |
 | `GLM_API_KEY` | — | 智谱 GLM API Key（必填，也兼容旧的 `DEEPSEEK_API_KEY`）|
 | `GLM_API_URL` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | 自定义 API 地址 |
-| `GLM_MODEL` | `glm-4.7-flash` | 自定义模型名称（推荐使用免费文本旗舰模型）|
+| `GLM_MODEL` | `glm-4.7-flash` | 首选模型名称（推荐使用免费文本旗舰模型）|
+| `GLM_FALLBACK_MODELS` | `glm-4.7-flash,glm-4-flash-250414` | 模型降级列表，超时/限流/空内容时自动降级 |
 | `SERPAPI_API_KEY` | — | SerpAPI 密钥（二选一） |
 | `TAVILY_API_KEY` | — | Tavily 密钥（二选一） |
 | `SEARCH_ENGINE` | 自动检测 | 强制指定搜索引擎：`serpapi` 或 `tavily`；运行时可通过前端切换 |
@@ -160,13 +184,33 @@ python main.py
 > 2. 未设置时，自动检测：优先使用 Tavily（如果有 `TAVILY_API_KEY`），否则使用 SerpAPI（如果有 `SERPAPI_API_KEY`）
 > 3. 运行时可通过客户发现页面的搜索 API 切换器在 Tavily/SerpAPI 间一键切换，无需重启
 
-### 5. 打开浏览器
+### 6. 打开浏览器
 
-访问 **http://localhost:8000**
+访问 **http://localhost:8000** → 自动跳转到登录页，使用 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 登录。登录后即可使用全部功能。管理员可在导航栏「用户管理」页面新增用户、管理权限。
 
 ---
 
 ## 使用教程
+
+### 方式零：用户管理与权限设置（V4.0+）
+
+系统 V4.0 起引入了多用户认证和精细化权限控制：
+
+1. **首次启动**：设置 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 环境变量，首次启动自动创建管理员
+2. **登录/注册**：访问首页自动跳转登录页，管理员可在导航栏进入「用户管理」
+3. **用户管理**（管理员专属）：
+   - **新增用户**：创建普通用户账号
+   - **修改密码**：可重置任意用户密码
+   - **启用/禁用**：动态控制用户是否可登录
+   - **删除用户**：支持删除用户账号（保留至少一个管理员）
+4. **权限设置**（V4.1，逐用户精细管控）：
+   - **搜索深度**：限制单次搜索的最大深度（默认 50）
+   - **搜索配额**：限制用户总的搜索次数（默认 100 次）
+   - **AI 分析开关**：控制用户能否使用 AI 分析功能
+   - **邮箱查找开关**：控制用户能否使用邮箱查找功能
+   - **配额重置**：一键将用户的已用搜索次数归零
+
+> 管理员账号不受任何配额和权限限制，搜索深度上限 999。
 
 ### 方式一：手动导入客户名单
 
@@ -237,31 +281,34 @@ python main.py
 
 ```
 AI-Trade-Customer-Analyzer/
-├── main.py                          # FastAPI 主入口（V3.5.0）
+├── main.py                          # FastAPI 主入口（V4.1，含 Session/登录路由）
 ├── 产品评审报告-V2.7.md              # 产品评审报告
-├── requirements.txt                 # 依赖清单
+├── requirements.txt                 # 依赖清单（新增 bcrypt / itsdangerous）
 ├── sync.sh                          # 一键同步脚本
 ├── app/
-│   ├── database.py                  # 数据库模型（12张表）
+│   ├── database.py                  # 数据库模型（13张表，含 User 表）
 │   ├── database_init.py             # 数据库初始化
+│   ├── auth.py                      # 认证与授权模块（V4.0/V4.1 权限检查）
 │   ├── api/
 │   │   ├── __init__.py              # 路由器聚合
 │   │   ├── routes.py                # 兼容层
 │   │   ├── customers.py             # 客户管理 API
-│   │   ├── discovery.py             # 客户发现 API（含搜索引擎切换）
+│   │   ├── discovery.py             # 客户发现 API（含搜索引擎切换 + 配额检查）
 │   │   ├── sync.py                  # 数据同步 API
 │   │   ├── config.py                # 配置管理 API
-│   │   ├── hunter.py                # Hunter 邮箱查找 API
+│   │   ├── hunter.py                # Hunter 邮箱查找 API（含权限检查）
 │   │   ├── tomba.py                 # Tomba 邮箱查找 API
 │   │   ├── waterfall.py             # 瀑布式邮箱发现 API
+│   │   ├── users.py                 # 用户管理 API（V4.0/V4.1 权限设置）
 │   │   └── geocode.py               # 地理编码 API（后台任务模式）
 │   ├── services/
 │   │   ├── firecrawl_service.py     # Firecrawl 爬虫降级服务（scrape_url 单页抓取，1 credit/次）
 │   │   ├── website_scraper.py       # 官网抓取 V2（多阶段 URL 发现 + Firecrawl 三层降级）
 │   │   ├── email_extractor.py       # 邮箱提取
 │   │   ├── keyword_analyzer.py      # 关键词分析（从配置文件加载）
-│   │   ├── keyword_expander.py      # AI 关键词扩展（多语言支持）
-│   │   ├── glm_analyzer.py            # GLM AI 分析
+│   │   ├── keyword_expander.py      # AI 关键词扩展（多语言支持，含模型降级）
+│   │   ├── glm_analyzer.py          # GLM AI 分析（含重试/降级）
+│   │   ├── similar_company_finder.py# 相似客户扩展（含模型降级）
 │   │   ├── scoring_engine.py        # 规则评分引擎（缓存化）
 │   │   ├── google_discovery.py      # SerpAPI / Tavily 搜索（运行时切换）
 │   │   ├── tavily_discovery.py      # Tavily 搜索客户端
@@ -272,7 +319,6 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── retry_manager.py         # 失败重试
 │   │   ├── deduplication.py         # 智能去重工具
 │   │   ├── country_language_map.py  # 60+ 国家语言映射表
-│   │   ├── similar_company_finder.py# 相似客户扩展
 │   │   ├── hunter_service.py        # Hunter.io API 客户端（5层配额优化）
 │   │   ├── tomba_service.py         # Tomba.io API 客户端
 │   │   ├── prospeo_service.py       # Prospeo.io API 客户端（Search+Enrich）
@@ -293,13 +339,16 @@ AI-Trade-Customer-Analyzer/
 │   ├── static/css/
 │   │   └── style.css
 │   └── templates/
-│       ├── base.html                # 基础模板（导航栏）
+│       ├── base.html                # 基础模板（导航栏，含登录状态）
+│       ├── login.html               # 登录页（V4.0 新增）
 │       ├── index.html               # 客户列表页
 │       ├── detail.html              # 客户详情页（跟进/Hunter/瀑布式邮箱一体化）
 │       ├── discovery.html           # 客户发现页（搜索引擎切换+相似客户）
 │       ├── config.html              # 评分系统配置页
 │       ├── hunter.html              # Hunter 邮箱查找页
-│       └── map.html                 # 地理分布地图页
+│       ├── map.html                 # 地理分布地图页
+│       ├── sync.html                # 数据同步页面
+│       └── users.html               # 用户管理页（V4.0 新增）
 ```
 
 ---
@@ -318,6 +367,7 @@ AI-Trade-Customer-Analyzer/
 | `prospeo_cache` | Prospeo Search+Enrich 缓存（7天有效，含 person_id） |
 | `email_quota_log` | 邮箱发现配额使用日志（持久化记录各平台消耗） |
 | `geocode_cache` | 地理编码结果缓存（UNIQUE query_key + 命中计数） |
+| `users` | 用户表（V4.0 新增：用户名/密码哈希/角色/权限字段/配额字段） |
 
 ---
 
@@ -388,11 +438,12 @@ pytest tests/ -q     # 简洁输出
 
 - **后端**：FastAPI + SQLAlchemy + SQLite/PostgreSQL
 - **前端**：Bootstrap 5 + JavaScript 模块化（utils/index/detail/discovery/config/hunter/map）
-- **AI**：智谱 GLM (glm-4.7-flash 文本旗舰模型，免费)
+- **AI**：智谱 GLM (`glm-4.7-flash` 免费文本旗舰模型，支持自动降级到 `glm-4-flash-250414`)
 - **搜索**：SerpAPI / Tavily（运行时一键切换）
 - **邮箱**：Hunter.io + Tomba.io + Prospeo.io + 官网抓取兜底（瀑布式四级级联）
 - **爬虫**：httpx + BeautifulSoup（异步并发，多阶段 URL 发现）
 - **爬虫降级**：Firecrawl（三层兜底，JS 渲染/反爬网站兜底，免费 1000 credits/月）
 - **地图**：Leaflet.js + MarkerCluster + Nominatim 地理编码
 - **缓存**：本地 SQLite 多级缓存（搜索/官网/AI分析/邮箱/地理编码）
+- **认证**：Session + bcrypt 密码哈希（V4.0 多用户 / V4.1 精细权限控制）
 - **测试**：pytest（API 集成测试 + 纯逻辑模块测试）
