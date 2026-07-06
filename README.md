@@ -1,8 +1,8 @@
-# AI Trade Customer Analyzer V4.1
+# AI Trade Customer Analyzer V4.3
 
-**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Reader (Jina AI) 免费爬虫降级 + GLM 模型自动降级
+**外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Reader (Jina AI) 免费爬虫降级 + SearXNG 自托管搜索引擎 + GLM 模型自动降级
 
-自动从 Google 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。爬虫降级使用 Jina AI Reader（`r.jina.ai`）**完全免费、无需 API Key**。多用户共享数据库，支持管理员对每个用户的搜索配额、搜索深度、AI分析权限、邮箱查找权限进行精细化管控。
+自动通过 SearXNG（自托管无限制）/ Tavily / SerpAPI 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。爬虫降级使用 Jina AI Reader（`r.jina.ai`）**完全免费、无需 API Key**。搜索引擎可选 SearXNG 自托管零成本方案。多用户共享数据库，支持管理员对每个用户的搜索配额、搜索深度、AI分析权限、邮箱查找权限进行精细化管控。
 
 ---
 
@@ -10,7 +10,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| **客户发现** | 输入国家 + 关键词 → AI扩展关键词 → SerpAPI/Tavily搜索Google → 自动过滤企业官网 |
+| **客户发现** | 输入国家 + 关键词 → AI扩展关键词 → SearXNG/Tavily/SerpAPI搜索 → 自动过滤企业官网 |
 | **Excel导入** | 上传含 Company Name / Website / Country 三列的 Excel 文件 |
 | **官网抓取 V2** | 三阶段 URL 发现（33 条 HEAD 预检 + 智能链接发现 + 异步并发 GET），带 Reader (Jina AI) 免费降级兜底 |
 | **Reader (Jina AI) 爬虫降级** | 三层降级统一使用免费的 r.jina.ai API 将 URL 转为 Markdown，零成本无需 API Key。支持 JS 渲染兜底。可自托管 Docker 镜像彻底消除外部依赖 |
@@ -32,7 +32,7 @@
 | **批量分析** | 一键分析所有未分析客户 |
 | **数据同步** | 多设备间同步数据（通过 Google Drive/AirDrop/iCloud/USB），自动去重合并 |
 | **导出Excel** | 导出完整分析报告 |
-| **搜索引擎切换** | 运行时一键切换 Tavily / SerpAPI 搜索后端，无需重启 |
+| **搜索引擎切换** | 运行时一键切换 SearXNG（免费本地）/ Tavily（付费）/ SerpAPI（付费）搜索后端，无需重启 |
 | **GLM 模型降级** | 首选模型超时/限流/空内容时自动降级到备用模型（`glm-4.7-flash` → `glm-4-flash-250414`） |
 
 ---
@@ -165,9 +165,10 @@ python main.py
 | `GLM_API_URL` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | 自定义 API 地址 |
 | `GLM_MODEL` | `glm-4.7-flash` | 首选模型名称（推荐使用免费文本旗舰模型）|
 | `GLM_FALLBACK_MODELS` | `glm-4.7-flash,glm-4-flash-250414` | 模型降级列表，超时/限流/空内容时自动降级 |
-| `SERPAPI_API_KEY` | — | SerpAPI 密钥（二选一） |
-| `TAVILY_API_KEY` | — | Tavily 密钥（二选一） |
-| `SEARCH_ENGINE` | 自动检测 | 强制指定搜索引擎：`serpapi` 或 `tavily`；运行时可通过前端切换 |
+| `SEARXNG_URL` | `http://127.0.0.1:8888` | SearXNG 实例地址（**推荐**，自部署完全免费，零API成本） |
+| `SERPAPI_API_KEY` | — | SerpAPI 密钥（二选一，有 SearXNG 时非必需） |
+| `TAVILY_API_KEY` | — | Tavily 密钥（二选一，有 SearXNG 时非必需） |
+| `SEARCH_ENGINE` | 自动检测 | 强制指定搜索引擎：`searxng` / `serpapi` / `tavily`；运行时可通过前端切换 |
 | `DATABASE_URL` | SQLite | PostgreSQL 连接字符串，如 `postgresql://user:pass@host/db` |
 | `HUNTER_API_KEY` | — | Hunter.io API Key |
 | `HUNTER_CACHE_TTL` | `604800` (7天) | Hunter 查询缓存 TTL |
@@ -185,10 +186,159 @@ python main.py
 | `EMAIL_DISCOVERY_ENABLE_SCRAPING` | `true` | 瀑布式邮箱发现：是否启用官网抓取兜底 |
 | `SCRAPE_VERIFY_SSL` | `false` | 官网爬虫是否验证 SSL 证书 |
 
-> **搜索引擎选择说明：** 系统同时支持 SerpAPI 和 Tavily 两种搜索后端。启动时按以下逻辑决定：
-> 1. 如果设置了 `SEARCH_ENGINE` 环境变量（`serpapi` 或 `tavily`），则强制使用指定引擎
-> 2. 未设置时，自动检测：优先使用 Tavily（如果有 `TAVILY_API_KEY`），否则使用 SerpAPI（如果有 `SERPAPI_API_KEY`）
-> 3. 运行时可通过客户发现页面的搜索 API 切换器在 Tavily/SerpAPI 间一键切换，无需重启
+> **搜索引擎选择说明：** 系统同时支持 SearXNG、SerpAPI 和 Tavily 三种搜索后端。启动时按以下逻辑决定：
+> 1. 如果设置了 `SEARCH_ENGINE` 环境变量（`searxng` / `serpapi` / `tavily`），则强制使用指定引擎
+> 2. 未设置时，自动检测：**优先使用 SearXNG**（如果有 `SEARXNG_URL`，零成本推荐），其次 Tavily（如果有 `TAVILY_API_KEY`），再次 SerpAPI（如果有 `SERPAPI_API_KEY`）
+> 3. 运行时可通过客户发现页面的搜索 API 切换器在 SearXNG/Tavily/SerpAPI 间一键切换，无需重启
+
+---
+
+### ⭐ SearXNG 自托管部署（小白教程，完全免费）
+
+> 🎯 **一句话解释**：SearXNG 是一个你自己电脑上运行的"搜索中转站"。它替你向 Google、Bing 等搜索引擎发请求，把结果汇总给你。**不需要任何 API Key，不用花钱，也没有搜索次数限制。**
+
+---
+
+#### 第一步：安装 Docker
+
+SearXNG 需要用 Docker 来运行。如果你电脑上还没有 Docker：
+
+**Windows 用户：**
+1. 浏览器打开 https://docs.docker.com/desktop/setup/install/windows-install/
+2. 下载 **Docker Desktop for Windows**
+3. 双击安装，一路点「下一步」完成安装
+4. 安装完成后重启电脑
+5. 启动 Docker Desktop（开始菜单搜 Docker，点开等它加载完，右下角出现小鲸鱼图标 ✅）
+
+> 💡 **如何确认 Docker 装好了？** 打开 cmd（命令提示符）或 PowerShell，输入 `docker --version`，显示出版本号就说明装好了。
+
+---
+
+#### 第二步：一键启动 SearXNG
+
+打开 **cmd（命令提示符）**，复制粘贴下面这一整条命令，按回车：
+
+```bash
+docker run -d --name searxng -p 127.0.0.1:8888:8080 searxng/searxng:latest
+```
+
+看到一串乱码一样的 ID 输出就成功了 ✅
+
+> ⚠️ **常见问题：**
+> - 如果提示 `port is already allocated`，说明 8888 端口被占用了，把命令里的 `8888` 改成 `8899` 之类的其他数字
+> - 如果提示 `docker: command not found`，说明 Docker 没装好，回到第一步
+
+---
+
+#### 第三步：启用 JSON 格式（必须做！否则搜不了）
+
+SearXNG 默认只能网页浏览，我们需要让它能返回 JSON 数据给本系统。
+
+**找到配置文件：**
+1. 打开 Docker Desktop
+2. 左侧点 **Containers**
+3. 找到 `searxng` 这个容器，点它
+4. 点顶部的 **Exec** 标签（或 Terminal 标签）
+5. 在弹出的终端里输入：
+   ```bash
+   apt-get update && apt-get install -y nano
+   nano /etc/searxng/settings.yml
+   ```
+6. 用键盘方向键往下翻，找到类似这样的内容：
+   ```yaml
+   search:
+     formats:
+       - html
+   ```
+7. 用方向键移到 `- html` 下面那行，输入以下内容（注意前面空两格）：
+   ```yaml
+     - json
+   ```
+   改完后应该是这样：
+   ```yaml
+   search:
+     formats:
+       - html
+       - json    # ← 这一行是新加的
+   ```
+8. 按 `Ctrl+X` → 按 `Y` 确认保存 → 按回车退出
+
+**重启 SearXNG：**
+回到 Windows 的 cmd（命令提示符），输入：
+```bash
+docker restart searxng
+```
+
+---
+
+#### 第四步：验证 SearXNG 是否正常工作
+
+在 cmd 里输入：
+```bash
+curl "http://127.0.0.1:8888/search?q=test&format=json"
+```
+
+如果返回了一大段带 `"results"` 的 JSON 文本 ✅ 说明 SearXNG 可以正常使用了。
+
+如果返回 `403` 或其他错误，说明第三步的 JSON 配置没生效，重新检查一下。
+
+---
+
+#### 第五步：在本系统中启用 SearXNG
+
+在你的项目目录里，用记事本打开 `.env` 文件（如果没有就新建一个），添加以下一行：
+
+```bash
+SEARXNG_URL=http://127.0.0.1:8888
+```
+
+或者在启动系统的 cmd 窗口中输入：
+```bash
+set SEARXNG_URL=http://127.0.0.1:8888
+```
+
+> **💡 原理**：系统启动时会自动检测 `SEARXNG_URL` 这个环境变量，有的话就自动优先使用 SearXNG，不需要任何 Key，零成本无限搜索。
+
+---
+
+#### 第六步：启动本系统，开始使用
+
+正常启动你的系统：
+```bash
+python main.py
+```
+
+打开浏览器访问 **http://localhost:8000**，在客户发现页面的「预览扩展关键词」行右侧，可以看到当前搜索引擎显示为 **SearXNG**。
+
+你也可以随时在下拉菜单中切换回 **Tavily** 或 **SerpAPI**，不需要重启系统。
+
+---
+
+#### 日常维护
+
+| 操作 | 命令 |
+|------|------|
+| 启动 SearXNG（如果重启过电脑） | `docker start searxng` |
+| 停止 SearXNG | `docker stop searxng` |
+| 查看是否在运行 | `docker ps`（能看到 searxng 说明在运行） |
+| 彻底删除重装 | `docker rm -f searxng` 然后重新跑第二步的命令 |
+| 更新到最新版 | `docker pull searxng/searxng:latest && docker restart searxng` |
+
+---
+
+#### 如果没有 Docker 怎么办？（备选方案）
+
+如果你的电脑装不了 Docker，可以临时用公共 SearXNG 实例测试（**仅适合测试，不建议长期使用**）：
+
+1. 打开记事本编辑 `.env` 文件，写入：
+   ```bash
+   SEARXNG_URL=https://searx.be
+   ```
+2. 启动系统即可使用
+
+> ⚠️ 公共实例可能限流或无法返回 JSON，如果不好用就还是装 Docker。
+
+---
 
 ### 6. 打开浏览器
 
@@ -231,9 +381,9 @@ python main.py
    - **Country**：目标国家（如 Saudi Arabia）
    - **Keyword**：行业关键词（如 wastewater contractor）
    - **Search Depth**：搜索深度（每个关键词获取的结果数，建议 30-50）
-3. 可选：在「预览扩展关键词」行右侧切换 **搜索 API**（Tavily / SerpAPI）
+3. 可选：在「预览扩展关键词」行右侧切换 **搜索 API**（SearXNG / Tavily / SerpAPI）
 4. 点击 **Start Search**
-5. 系统自动完成：AI扩展关键词 → 搜索Google → 过滤官网 → 去重 → 官网抓取（含 Reader 免费降级兜底）→ AI分析 → 规则评分 → 保存入库
+5. 系统自动完成：AI扩展关键词 → 搜索（SearXNG/Tavily/SerpAPI） → 过滤官网 → 去重 → 官网抓取（含 Reader 免费降级兜底）→ AI分析 → 规则评分 → 保存入库
 6. 在 **客户列表** 页查看结果
 
 ### 查看详情
@@ -316,8 +466,9 @@ AI-Trade-Customer-Analyzer/
 │   │   ├── glm_analyzer.py          # GLM AI 分析（含重试/降级）
 │   │   ├── similar_company_finder.py# 相似客户扩展（含模型降级）
 │   │   ├── scoring_engine.py        # 规则评分引擎（缓存化）
-│   │   ├── google_discovery.py      # SerpAPI / Tavily 搜索（运行时切换）
+│   │   ├── google_discovery.py      # SearXNG / SerpAPI / Tavily 搜索（运行时切换）
 │   │   ├── tavily_discovery.py      # Tavily 搜索客户端
+│   │   ├── searxng_discovery.py     # SearXNG 自托管搜索客户端（免费）
 │   │   ├── search_task_service.py   # 搜索任务管理 + 断点续跑 + 任务日志
 │   │   ├── cache_manager.py         # 四层缓存管理
 │   │   ├── url_normalizer.py        # 网址标准化
@@ -445,7 +596,7 @@ pytest tests/ -q     # 简洁输出
 - **后端**：FastAPI + SQLAlchemy + SQLite/PostgreSQL
 - **前端**：Bootstrap 5 + JavaScript 模块化（utils/index/detail/discovery/config/hunter/map）
 - **AI**：智谱 GLM (`glm-4.7-flash` 免费文本旗舰模型，支持自动降级到 `glm-4-flash-250414`)
-- **搜索**：SerpAPI / Tavily（运行时一键切换）
+- **搜索**：SearXNG（免费自托管）/ Tavily / SerpAPI（运行时一键切换）
 - **邮箱**：Hunter.io + Tomba.io + Prospeo.io + 官网抓取兜底（瀑布式四级级联）
 - **爬虫**：httpx + BeautifulSoup（异步并发，多阶段 URL 发现）
 - **爬虫降级**：Jina AI Reader（`r.jina.ai`，完全免费零配置，支持自托管 Docker 镜像） + 可选旧版 Firecrawl 兜底

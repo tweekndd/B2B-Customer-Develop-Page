@@ -1,5 +1,34 @@
 # 更新日志
 
+## v4.3（2026-07-06）
+
+### 🆕 SearXNG 自托管搜索引擎支持（零成本替代 Tavily/SerpAPI）
+
+**问题**：Tavily 和 SerpAPI 均为付费 API，且有调用次数限制；免费版 Tavily 每月仅 1000 次搜索。
+
+**方案**：集成 [SearXNG](https://github.com/searxng/searxng) 自托管元搜索引擎，聚合 Google/Bing/DuckDuckGo/Brave 等多引擎结果，零 API 成本、无调用次数限制。
+
+| 对比 | Tavily | SerpAPI | SearXNG |
+|:-----|:-------|:--------|:--------|
+| **费用** | 付费 | 付费 | **完全免费** |
+| **API Key** | 需要 | 需要 | **不需要** |
+| **结果来源** | 单一 | Google | **多引擎聚合** |
+| **部署** | 云端 | 云端 | **本地 / VPS** |
+| **搜索限制** | 1000次/月(免费版) | 100次/月(免费版) | **无限制** |
+
+**新增文件：**
+- `app/services/searxng_discovery.py` — SearXNG 搜索客户端（~180行）
+
+**修改文件：**
+- `app/services/google_discovery.py` — 新增 `searxng` 引擎选项，自动检测优先，支持运行时切换
+- `app/api/discovery.py` — API 切换端点支持 `searxng` 引擎
+- `README.md` — 新增 SearXNG 部署指南
+
+**使用方法：**
+1. 部署 SearXNG（Docker 一行命令）
+2. 设置 `SEARXNG_URL` 环境变量（默认 `http://127.0.0.1:8888`）
+3. 系统自动优先使用 SearXNG，零配置切换
+
 ## v3.5.0（2026-07-03）
 
 ### 🔄 AI 引擎更换：DeepSeek → 智谱 GLM-4.7-Flash（免费）

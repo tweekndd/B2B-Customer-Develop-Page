@@ -58,14 +58,19 @@ def api_get_search_engine():
 
 
 @router.post("/discovery/search-engine")
-def api_set_search_engine(engine: str = Query(..., description="搜索引擎: tavily 或 serpapi")):
+def api_set_search_engine(engine: str = Query(..., description="搜索引擎: tavily / serpapi / searxng")):
     """运行时切换搜索引擎"""
-    if engine not in ("tavily", "serpapi"):
-        raise HTTPException(status_code=400, detail=f"无效的搜索引擎: {engine}，仅支持 tavily / serpapi")
+    if engine not in ("tavily", "serpapi", "searxng"):
+        raise HTTPException(status_code=400, detail=f"无效的搜索引擎: {engine}，仅支持 tavily / serpapi / searxng")
     info = get_search_engine_info()
     available = info.get("available", {})
     if not available.get(engine, False):
-        raise HTTPException(status_code=400, detail=f"{engine} 未配置 API Key，无法切换")
+        detail_map = {
+            "tavily": "未配置 TAVILY_API_KEY",
+            "serpapi": "未配置 SERPAPI_API_KEY",
+            "searxng": "未配置 SEARXNG_URL（需要先部署 SearXNG 服务）",
+        }
+        raise HTTPException(status_code=400, detail=f"{engine} {detail_map.get(engine, '不可用')}，无法切换")
     result = set_search_engine(engine)
     if result != engine:
         raise HTTPException(status_code=500, detail="切换失败")

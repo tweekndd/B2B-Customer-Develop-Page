@@ -15,17 +15,20 @@ from app.services.country_language_map import get_language_info
 _current_engine: str = "none"
 _serpapi_key: str = os.environ.get("SERPAPI_API_KEY", "")
 _tavily_key: str = os.environ.get("TAVILY_API_KEY", "")
+_searxng_url: str = os.environ.get("SEARXNG_URL", "")
 
 
 def _init_search_engine() -> str:
     """初始化搜索引擎（仅启动时调用一次）"""
     global _current_engine
     forced = os.environ.get("SEARCH_ENGINE", "").strip().lower()
-    if forced in ("serpapi", "tavily"):
+    if forced in ("serpapi", "tavily", "searxng"):
         _current_engine = forced
         return _current_engine
-    # 自动检测
-    if _tavily_key:
+    # 自动检测（SearXNG 优先 — 零成本，自部署）
+    if _searxng_url:
+        _current_engine = "searxng"
+    elif _tavily_key:
         _current_engine = "tavily"
     elif _serpapi_key:
         _current_engine = "serpapi"
@@ -35,14 +38,16 @@ def _init_search_engine() -> str:
 
 
 def set_search_engine(engine: str) -> str:
-    """运行时切换搜索引擎（'tavily' | 'serpapi'）"""
+    """运行时切换搜索引擎（'tavily' | 'serpapi' | 'searxng'）"""
     global _current_engine
-    if engine not in ("tavily", "serpapi"):
+    if engine not in ("tavily", "serpapi", "searxng"):
         return _current_engine  # 无效值，不切换
-    # 检查是否已配置对应 API Key
+    # 检查是否已配置
     if engine == "tavily" and not _tavily_key:
         return _current_engine
     if engine == "serpapi" and not _serpapi_key:
+        return _current_engine
+    if engine == "searxng" and not _searxng_url:
         return _current_engine
     _current_engine = engine
     return _current_engine
@@ -52,8 +57,14 @@ def get_search_engine_info() -> dict:
     """获取搜索引擎配置状态"""
     return {
         "current": _current_engine,
-        "available": {"tavily": bool(_tavily_key), "serpapi": bool(_serpapi_key)},
-        "default": "tavily" if _tavily_key else ("serpapi" if _serpapi_key else "none"),
+        "available": {
+            "tavily": bool(_tavily_key),
+            "serpapi": bool(_serpapi_key),
+            "searxng": bool(_searxng_url),
+        },
+        "default": "searxng" if _searxng_url else (
+            "tavily" if _tavily_key else ("serpapi" if _serpapi_key else "none")
+        ),
     }
 
 
@@ -82,8 +93,11 @@ async def search_google(
         return await search_tavily(keyword, country=country, max_results=max_results)
     elif engine == "serpapi":
         return await _search_via_serpapi(keyword, country, max_results)
+    elif engine == "searxng":
+        from app.services.searxng_discovery import search_searxng
+        return await search_searxng(keyword, country=country, max_results=max_results)
     else:
-        print("错误: 未配置任何搜索引擎。请设置 SERPAPI_API_KEY 或 TAVILY_API_KEY 环境变量")
+        print("错误: 未配置任何搜索引擎。请设置 SEARXNG_URL、SERPAPI_API_KEY 或 TAVILY_API_KEY 环境变量")
         return []
 
 
