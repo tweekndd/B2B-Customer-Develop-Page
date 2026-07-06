@@ -36,8 +36,17 @@ Thumbs.db
 .env
 *.env.local
 
+# VPS Deployment data (Docker volumes mapped to host)
+searxng/data/
+/data/
+
 # Logs
 *.log
+
+# Stray files
+=2.4.0
+npm
+ssh service/
 
 # Debug
 debug_main.py

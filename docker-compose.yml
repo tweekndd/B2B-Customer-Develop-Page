@@ -1,0 +1,92 @@
+# =============================================================================
+# B2B Customer Develop Platform — docker-compose.yml
+# 生产部署编排：应用 + SearXNG 搜索引擎 + 可选 PostgreSQL
+#
+# 使用方式:
+#   1. 复制 .env.example 为 .env 并填写配置
+#   2. docker compose up -d
+#   3. 访问 http://VPS_IP:8000
+# =============================================================================
+
+services:
+
+  # ─── SearXNG 自托管搜索引擎 ────────────────────────────────────────
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    # 只监听 127.0.0.1，不对外暴露（仅内网通过 docker network 访问）
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      # 自定义配置（只读）
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      # 持久化数据（秘钥、缓存等）
+      - searxng-data:/etc/searxng
+    environment:
+      - SEARXNG_SECRET_KEY=${SEARXNG_SECRET_KEY:?必须设置 SEARXNG_SECRET_KEY}
+    restart: unless-stopped
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─── PostgreSQL 数据库（可选） ──────────────────────────────────────
+  # 如不使用 PostgreSQL，请注释本服务，并确保 .env 中未设置 DATABASE_URL
+  # 默认使用 SQLite（无需额外配置）
+  db:
+    image: postgres:15-alpine
+    container_name: b2b-db
+    # 可选：如需外部连接数据库管理工具，取消下面注释
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${DB_USER:-b2b}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-please-change-in-env}
+      POSTGRES_DB: ${DB_NAME:-b2b_customers}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-b2b}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    profiles:
+      # 默认不启动数据库容器，调用时需加 --profile with-db
+      # 或设置 COMPOSE_PROFILES=with-db
+      - with-db
+
+  # ─── FastAPI 应用 ─────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: b2b-app
+    ports:
+      - "0.0.0.0:8000:8000"
+    depends_on:
+      searxng:
+        condition: service_healthy
+      # 使用 PostgreSQL 时启用，否则注释掉
+      # db:
+      #   condition: service_healthy
+    env_file: .env
+    volumes:
+      # SQLite 数据库持久化（如使用 PostgreSQL 可删除此卷）
+      - sqlite-data:/app/app
+    restart: unless-stopped
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+# ─── 持久化卷 ───────────────────────────────────────────────────────
+volumes:
+  searxng-data:
+  postgres-data:
+  sqlite-data:

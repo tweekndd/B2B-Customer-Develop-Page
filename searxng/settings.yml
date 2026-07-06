@@ -1,0 +1,36 @@
+# =============================================================================
+# SearXNG 配置文件
+# 仅覆盖需要修改的项，其余继承 use_default_settings: true
+# 部署参考: https://docs.searxng.org/admin/settings/
+# =============================================================================
+use_default_settings: true
+
+general:
+  instance_name: "B2B SearXNG"
+
+search:
+  formats:
+    - html
+    - json
+
+server:
+  # secret_key 会被 docker-compose 中 SEARXNG_SECRET_KEY 环境变量覆盖
+  # 此处保留占位值确保容器启动
+  secret_key: "change-me-in-docker-compose"
+  limiter: false          # 内网使用，关闭限流
+  image_proxy: false
+  bind_address: "0.0.0.0"
+
+# 默认启用这些引擎
+engines:
+  # 以下只列出我们希望启用的引擎，SearXNG 会加载其他默认引擎
+  - name: duckduckgo
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: startpage
+    disabled: false
+  - name: google
+    disabled: false

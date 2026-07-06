@@ -1,6 +1,33 @@
 # 更新日志
 
-## v4.3（2026-07-06）
+## v4.4（2026-07-06）
+
+### 🚀 VPS 生产部署支持（Docker 容器化）
+
+**问题**：此前仅支持在本地 Windows/Mac 开发环境运行，没有面向 VPS 服务器的生产部署方案。
+
+**方案**：新增完整 Docker 容器化部署，一键部署到任意 VPS（Ubuntu/Debian），同时内置 SearXNG 搜索引擎容器。
+
+**新增文件：**
+- `Dockerfile` — 多阶段构建，Python 3.11-slim，生产级配置
+- `docker-compose.yml` — 三服务编排：FastAPI 应用 + SearXNG 搜索引擎 + 可选 PostgreSQL
+- `searxng/settings.yml` — SearXNG 配置文件（启用 JSON API + 多搜索引擎）
+- `deploy.sh` — 一键部署脚本（部署/更新/日志/备份）
+- `.env.example` — 完整的环境变量模板（含注释说明）
+
+**文档更新：**
+- `README.md` — 新增完整 VPS 部署章节：
+  - Docker 安装 → 文件上传 → 环境配置 → 一键启动
+  - 日常管理命令（日志/启动/停止/更新）
+  - PostgreSQL 升级方案（含 docker-compose profile）
+  - Nginx 反代 + HTTPS（Certbot SSL 证书）
+  - 常见问题排查
+
+**技术要点：**
+- SearXNG 通过 Docker 内网 `http://searxng:8080` 访问，不对外暴露端口
+- SQLite 通过 Docker 命名卷持久化，容器重启/更新不丢数据
+- `deploy.sh` 支持 `deploy / update / logs / db-backup` 四个子命令
+- PostgreSQL 通过 Compose Profile 隔离（`COMPOSE_PROFILES=with-db`），按需启用
 
 ### 🆕 SearXNG 自托管搜索引擎支持（零成本替代 Tavily/SerpAPI）
 

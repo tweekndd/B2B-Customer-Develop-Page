@@ -1,4 +1,4 @@
-# AI Trade Customer Analyzer V4.3
+# AI Trade Customer Analyzer V4.4
 
 **外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Reader (Jina AI) 免费爬虫降级 + SearXNG 自托管搜索引擎 + GLM 模型自动降级
 
@@ -340,6 +340,366 @@ python main.py
 
 ---
 
+---
+
+## 🖥️ VPS 部署（生产环境）
+
+> 🎯 **如果你想把这套系统部署到公网服务器上，让团队成员都能使用，而不是只在你自己电脑上运行，就看这里。**
+
+部署后效果：
+- 系统在 **公网服务器** 上 7×24 小时运行
+- 你和团队成员通过 **http://你的服务器IP:8000** 访问
+- SearXNG 搜索引擎也运行在同一台服务器上，零 API 成本
+- 所有数据存储在服务器上，多设备共享
+
+---
+
+### 方案选择
+
+| 方案 | 难度 | 说明 |
+|------|------|------|
+| **Docker 部署（推荐）** | ⭐⭐ | 用 Docker 容器化运行，一键部署，方便更新和维护 |
+| 手动部署 | ⭐⭐⭐ | 在服务器上装 Python 环境手动运行（不推荐，维护麻烦） |
+
+以下只介绍 **Docker 部署**方案。
+
+---
+
+### 准备工作
+
+**你需要：**
+1. **一台 VPS 服务器**（推荐配置：2核4G，系统 Ubuntu 22.04 / Debian 12）
+2. **一个域名**（可选，建议配置 Nginx 反代 + HTTPS，后面会说）
+3. **SSH 客户端**（Windows 用 Terminal 或 PuTTY，Mac/Linux 直接在终端连接）
+
+**服务器最低配置：**
+| 配置项 | 最低要求 | 推荐 |
+|--------|---------|------|
+| CPU | 1核 | 2核+ |
+| 内存 | 2GB | 4GB |
+| 硬盘 | 20GB | 40GB+ |
+| 带宽 | 5Mbps | 10Mbps+ |
+
+---
+
+### 第一步：连接 VPS
+
+打开终端（Windows 推荐用 Windows Terminal 或 PowerShell），输入：
+
+```bash
+ssh root@你的服务器IP
+```
+
+输入密码后就连上了（如果用的是 SSH Key，不需要密码）。
+
+> 💡 **没有 VPS？** 推荐以下云服务商（国内用户免翻）：
+> - 阿里云国际 / 腾讯云 / 华为云 — 国内可选
+> - 搬瓦工 (BandwagonHost) / RackNerd — 高性价比
+> - 甲骨文云 (Oracle Cloud) — 有永久免费套餐
+
+---
+
+### 第二步：安装 Docker（在 VPS 上执行）
+
+连上服务器后，依次执行以下命令安装 Docker：
+
+```bash
+# 更新系统包
+apt update && apt upgrade -y
+
+# 安装 Docker（官方一键脚本）
+curl -fsSL https://get.docker.com | bash
+
+# 验证安装成功
+docker --version
+# 应该输出类似: Docker version 27.x.x
+```
+
+---
+
+### 第三步：上传项目文件到 VPS
+
+**方法 A — 用 Git 克隆（推荐）：**
+
+如果你的 VPS 能访问 GitHub，直接把代码克隆上去：
+
+```bash
+# 在 VPS 上执行
+cd /opt
+git clone https://github.com/tweekndd/B2B-Customer-Develop-Page.git
+cd B2B-Customer-Develop-Page
+```
+
+**方法 B — 从本地上传（用 scp）：**
+
+在你自己的电脑上打开新终端（不是 VPS 那个终端）：
+
+```bash
+# 在本机执行，把项目传到 VPS
+cd D:/Personal/Desktop/MatrixPad/AI/开发
+scp -r . root@你的服务器IP:/opt/B2B-Customer-Develop-Page
+```
+
+> 💡 `D:` 开头的路径是 Windows 格式。如果报错，先在 Git Bash 或 WSL 中执行。
+
+---
+
+### 第四步：配置环境变量
+
+在 VPS 上（回到 SSH 那个终端），复制配置模板并编辑：
+
+```bash
+cd /opt/B2B-Customer-Develop-Page
+cp .env.example .env
+nano .env
+```
+
+**必须修改的几项：**
+
+```bash
+# 1. SearXNG 秘钥 — 改成任意随机字符串
+SEARXNG_SECRET_KEY=用 openssl rand -hex 32 生成一串随机字符
+
+# 2. Session 签名秘钥 — 改成另一串随机字符串
+SESSION_SECRET=再生成一串随机字符
+
+# 3. 管理员密码 — 设一个强密码
+ADMIN_PASSWORD=你的管理员密码
+
+# 4. GLM API Key（用于 AI 分析）
+GLM_API_KEY=你的智谱API Key
+
+# 5. PostgreSQL 密码（如果用 PostgreSQL 的话）
+DB_PASSWORD=数据库密码（可选）
+
+# 6. 设置 SearXNG 连接地址（Docker 内网地址，不需要改）
+# 保持注释状态即可，docker-compose 会自动配置
+# SEARXNG_URL=http://searxng:8080
+```
+
+> ⏭️ **其他 API Key（邮箱查找等）** 暂时不填也能用，先跑起来再说。
+
+编辑完按 `Ctrl+X` → `Y` → `回车` 保存退出。
+
+---
+
+### 第五步：一键启动
+
+```bash
+# 在 VPS 上执行（项目根目录）
+bash deploy.sh
+```
+
+脚本会自动完成以下工作：
+1. ✅ 检查 Docker 是否安装
+2. ✅ 构建 Docker 镜像（下载依赖包，约 2-5 分钟）
+3. ✅ 启动 SearXNG 搜索引擎
+4. ✅ 启动 FastAPI 应用
+5. ✅ 等待服务就绪
+
+看到绿色 **"部署完成！"** 说明成功了 🎉
+
+---
+
+### 第六步：访问系统
+
+打开浏览器，访问：
+
+```
+http://你的服务器IP:8000
+```
+
+用你在 `.env` 中设置的 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 登录。
+
+---
+
+### 各组件说明
+
+| 组件 | 容器名 | 功能 | 端口 |
+|------|--------|------|------|
+| **FastAPI 应用** | `b2b-app` | 系统主程序 | `8000`（对外暴露） |
+| **SearXNG** | `searxng` | 自托管搜索引擎 | `8888`（仅内网） |
+| **PostgreSQL** | `b2b-db` | 数据库（可选） | `5432`（仅内网） |
+
+> SearXNG 监听在 `127.0.0.1:8888`（不对外暴露），应用通过 Docker 内网地址 `http://searxng:8080` 访问它。
+
+---
+
+### 日常管理
+
+```bash
+# 查看所有容器状态
+docker compose ps
+
+# 查看应用日志（实时）
+docker compose logs -f app
+
+# 查看 SearXNG 日志
+docker compose logs -f searxng
+
+# 停止所有服务
+docker compose down
+
+# 启动所有服务
+docker compose up -d
+
+# 重启单个服务
+docker compose restart app
+```
+
+---
+
+### 更新代码
+
+当你在本地改了代码，想更新到 VPS：
+
+```bash
+# 方法 1：如果用的是 Git 克隆
+cd /opt/B2B-Customer-Develop-Page
+git pull
+
+# 方法 2：如果用的是 scp 上传，重新上传覆盖
+
+# 然后执行更新命令
+bash deploy.sh update
+```
+
+这会自动拉取最新代码 → 重新构建镜像 → 重启容器。
+
+---
+
+### 备份数据库
+
+SQLite 数据库文件默认存储在 Docker 卷中，使用以下命令备份：
+
+```bash
+# 备份到 backups/ 目录
+bash deploy.sh db-backup
+
+# 备份文件位置：backups/customers_20241201_120000.db
+```
+
+也可以手动从 Docker 卷复制：
+
+```bash
+# 直接复制数据库文件到宿主机
+docker cp b2b-app:/app/app/customers.db ./backup_customers.db
+```
+
+---
+
+### ⭐ 进阶：使用 PostgreSQL（生产环境推荐）
+
+默认使用 SQLite，简单够用。但在生产环境（多人并发使用）建议升级到 PostgreSQL：
+
+**1. 取消注释 `docker-compose.yml` 中的 db 服务：**
+
+编辑 `docker-compose.yml`，找到 `app` 服务的 `depends_on` 部分，取消 db 的注释：
+
+```yaml
+depends_on:
+  searxng:
+    condition: service_healthy
+  db:                              # ← 取消注释
+    condition: service_healthy     # ← 取消注释
+```
+
+**2. 在 `.env` 中设置 PostgreSQL 连接地址：**
+
+```bash
+DATABASE_URL=postgresql://b2b:你的密码@db:5432/b2b_customers
+```
+
+**3. 通过 profile 启动（推荐方式，不解锁 docker-compose.yml）：**
+
+```bash
+# 启用 with-db profile 来启动 PostgreSQL
+COMPOSE_PROFILES=with-db docker compose up -d
+
+# 或者设置环境变量让它永久生效
+echo "COMPOSE_PROFILES=with-db" >> .env
+docker compose up -d
+```
+
+> ⚠️ **迁移注意**：从 SQLite 切换到 PostgreSQL 需要先导出数据。建议先用 SQLite 跑起来，确认系统工作正常后再考虑迁移。
+
+---
+
+### ⭐ 进阶：配置 Nginx 反代 + HTTPS（推荐）
+
+通过 IP + 端口访问不够安全。配置域名和 HTTPS 后更专业：
+
+```bash
+# 安装 Nginx
+apt install nginx -y
+
+# 配置反代
+nano /etc/nginx/sites-available/b2b
+```
+
+写入以下内容：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;  # 改成你的域名
+
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+启用配置并申请 SSL 证书：
+
+```bash
+ln -s /etc/nginx/sites-available/b2b /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# 申请免费 SSL 证书（需先解析域名到服务器 IP）
+apt install certbot python3-certbot-nginx -y
+certbot --nginx -d your-domain.com
+```
+
+之后就可以用 **https://your-domain.com** 访问了。
+
+---
+
+### 常见问题
+
+**Q: 部署后访问不了，网页打不开？**
+A: 检查服务器防火墙是否放行了 8000 端口：
+```bash
+# Ubuntu / Debian
+ufw allow 8000
+
+# 云服务商控制台也要检查安全组/防火墙规则
+```
+
+**Q: 使用 SQLite 时数据会丢失吗？**
+A: 不会。SQLite 数据库存储在 Docker 命名卷 `sqlite-data` 中，重启容器不会丢失。执行 `docker compose down` 也不会删除卷。只有 `docker compose down -v` 才会删除。
+
+**Q: 服务器重启后需要手动启动吗？**
+A: 不需要。所有容器设置了 `restart: unless-stopped`，Docker 服务启动时会自动拉起。
+
+**Q: 如何查看 SearXNG 是否正常工作？**
+A:
+```bash
+curl http://127.0.0.1:8888/search?q=test&format=json
+# 应该返回带 "results" 的 JSON
+```
+
+**Q: 如何切换搜索引擎？**
+A: 登录系统后，在「客户发现」页面右下角的搜索引擎下拉框中切换。或者在 `.env` 中设置 `SEARCH_ENGINE=searxng` 固定使用 SearXNG。
+
+---
+
 ### 6. 打开浏览器
 
 访问 **http://localhost:8000** → 自动跳转到登录页，使用 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 登录。登录后即可使用全部功能。管理员可在导航栏「用户管理」页面新增用户、管理权限。
@@ -438,9 +798,14 @@ python main.py
 ```
 AI-Trade-Customer-Analyzer/
 ├── main.py                          # FastAPI 主入口（V4.1，含 Session/登录路由）
-├── 产品评审报告-V2.7.md              # 产品评审报告
+├── Dockerfile                       # Docker 镜像构建文件（VPS 部署用）
+├── docker-compose.yml               # Docker 编排：应用 + SearXNG + 可选 PostgreSQL
+├── deploy.sh                        # VPS 一键部署脚本
+├── .env.example                     # 环境变量配置模板
 ├── requirements.txt                 # 依赖清单（新增 bcrypt / itsdangerous）
 ├── sync.sh                          # 一键同步脚本
+├── searxng/
+│   └── settings.yml                 # SearXNG 配置文件（启用 JSON API）
 ├── app/
 │   ├── database.py                  # 数据库模型（13张表，含 User 表）
 │   ├── database_init.py             # 数据库初始化
