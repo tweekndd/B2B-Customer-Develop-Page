@@ -3,19 +3,21 @@
    ============================================ */
 
 let searchTimer = null, statusPollTimer = null;
+let currentPage = 1, currentPageSize = 50, totalPages = 1;
 
 window.addEventListener('beforeunload', () => {
     if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
 });
 
 // ── 加载客户列表 ──
-async function loadCustomers() {
+async function loadCustomers(resetPage) {
+    if (resetPage) currentPage = 1;
     const search = document.getElementById('searchInput').value;
     const country = document.getElementById('countryFilter').value;
     const priority = document.getElementById('priorityFilter').value;
     const status = document.getElementById('statusFilter').value;
     const sort = document.getElementById('sortFilter').value;
-    let url = `/api/customers?sort_by_score=${sort}`;
+    let url = `/api/customers?sort_by_score=${sort}&page=${currentPage}&page_size=${currentPageSize}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (country) url += `&country=${encodeURIComponent(country)}`;
     if (priority) url += `&priority=${encodeURIComponent(priority)}`;
@@ -89,6 +91,9 @@ function renderTable(data) {
         </tr>`;
     });
     tbody.innerHTML = html;
+    totalPages = data.total_pages || 1;
+    currentPage = data.page || 1;
+    renderPagination(data.total || 0, currentPage, totalPages);
 }
 
 function _stars(rating) {
@@ -100,6 +105,65 @@ function _stars(rating) {
             : '<i class="bi bi-star text-muted" style="opacity:0.3"></i>';
     }
     return s;
+}
+
+// ── 分页控件渲染 ──
+function renderPagination(total, page, totalPages) {
+    const container = document.getElementById('paginationControls');
+    if (!container) return;
+    if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+    let html = '<div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" style="flex-wrap:wrap;gap:8px">';
+    html += `<small class="text-muted">共 ${total} 条，第 ${page}/${totalPages} 页</small>`;
+    html += '<nav><ul class="pagination pagination-sm mb-0">';
+
+    // 上一页
+    html += `<li class="page-item ${page <= 1 ? 'disabled' : ''}">`;
+    html += `<a class="page-link" href="#" onclick="goToPage(${page - 1});return false;">«</a></li>`;
+
+    // 页码按钮
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, page + 2);
+    if (start > 1) {
+        html += '<li class="page-item"><a class="page-link" href="#" onclick="goToPage(1);return false;">1</a></li>';
+        if (start > 2) html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+    }
+    for (let i = start; i <= end; i++) {
+        html += `<li class="page-item ${i === page ? 'active' : ''}">`;
+        html += `<a class="page-link" href="#" onclick="goToPage(${i});return false;">${i}</a></li>`;
+    }
+    if (end < totalPages) {
+        if (end < totalPages - 1) html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="goToPage(${totalPages});return false;">${totalPages}</a></li>`;
+    }
+
+    // 下一页
+    html += `<li class="page-item ${page >= totalPages ? 'disabled' : ''}">`;
+    html += `<a class="page-link" href="#" onclick="goToPage(${page + 1});return false;">»</a></li>`;
+
+    html += '</ul></nav>';
+
+    // 每页条数选择
+    html += `<select class="form-select form-select-sm" style="width:auto" onchange="changePageSize(this.value)">
+        <option value="20" ${currentPageSize === 20 ? 'selected' : ''}>20条/页</option>
+        <option value="50" ${currentPageSize === 50 ? 'selected' : ''}>50条/页</option>
+        <option value="100" ${currentPageSize === 100 ? 'selected' : ''}>100条/页</option>
+        <option value="200" ${currentPageSize === 200 ? 'selected' : ''}>200条/页</option>
+    </select>`;
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function goToPage(page) {
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    loadCustomers();
+}
+
+function changePageSize(size) {
+    currentPageSize = parseInt(size);
+    currentPage = 1;
+    loadCustomers();
 }
 
 // ── 加载统计（带数字动画） ──
@@ -254,7 +318,7 @@ async function deleteCustomer(id) {
 
 function debouncedSearch() {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { loadCustomers(); }, 400);
+    searchTimer = setTimeout(() => { loadCustomers(true); }, 400);
 }
 
 function refreshData() { loadCustomers(); loadStats(); }

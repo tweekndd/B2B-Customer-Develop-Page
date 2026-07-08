@@ -87,17 +87,17 @@
 <!-- 筛选栏 -->
 <div class="filter-bar" data-animate>
     <input type="text" class="form-control" id="searchInput" placeholder="搜索公司名称..." oninput="debouncedSearch()" style="flex:1;min-width:160px">
-    <select class="form-select" id="countryFilter" onchange="loadCustomers()">
+    <select class="form-select" id="countryFilter" onchange="loadCustomers(true)">
         <option value="">所有国家</option>
     </select>
-    <select class="form-select" id="priorityFilter" onchange="loadCustomers()">
+    <select class="form-select" id="priorityFilter" onchange="loadCustomers(true)">
         <option value="">所有优先级</option>
         <option value="A">A 级 (80-100)</option>
         <option value="B">B 级 (60-79)</option>
         <option value="C">C 级 (40-59)</option>
         <option value="D">D 级 (0-39)</option>
     </select>
-    <select class="form-select" id="statusFilter" onchange="loadCustomers()">
+    <select class="form-select" id="statusFilter" onchange="loadCustomers(true)">
         <option value="">所有状态</option>
         <option value="待联系">待联系</option>
         <option value="已发邮件">已发邮件</option>
@@ -105,7 +105,7 @@
         <option value="无效线索">无效线索</option>
         <option value="成单">成单</option>
     </select>
-    <select class="form-select" id="sortFilter" onchange="loadCustomers()">
+    <select class="form-select" id="sortFilter" onchange="loadCustomers(true)"
         <option value="desc">评分从高到低</option>
         <option value="asc">评分从低到高</option>
     </select>
@@ -147,6 +147,8 @@
             </table>
         </div>
     </div>
+    <!-- 分页控件 -->
+    <div id="paginationControls"></div>
 </div>
 
 <!-- 导入弹窗 -->

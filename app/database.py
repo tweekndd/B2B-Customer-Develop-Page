@@ -303,6 +303,12 @@ def init_db():
     _migrate_add_column(engine, "search_tasks", "task_log", "TEXT")
     # Hunter 缓存表字段
     _migrate_add_column(engine, "hunter_cache", "hits", "INTEGER DEFAULT 1")
+    # V4.1 新增：用户权限字段
+    _migrate_add_column(engine, "users", "search_depth_limit", "INTEGER DEFAULT 50")
+    _migrate_add_column(engine, "users", "search_quota", "INTEGER DEFAULT 100")
+    _migrate_add_column(engine, "users", "searches_used", "INTEGER DEFAULT 0")
+    _migrate_add_column(engine, "users", "ai_analysis_enabled", "INTEGER DEFAULT 1")
+    _migrate_add_column(engine, "users", "email_finding_enabled", "INTEGER DEFAULT 1")
 
 
 def _migrate_add_column(engine, table: str, column: str, col_type: str):
