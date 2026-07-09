@@ -1,4 +1,9 @@
 # AI Trade Customer Analyzer V4.4
+## License
+
+This project is licensed under the Apache License 2.0.
+
+See the [LICENSE](LICENSE) file for details.
 
 **外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Reader (Jina AI) 免费爬虫降级 + SearXNG 自托管搜索引擎 + GLM 模型自动降级
 
