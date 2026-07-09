@@ -13,3 +13,4 @@ geopy>=2.4.0
 firecrawl-py>=4.0.0  # 网站爬虫降级方案，JS 渲染 / 反爬虫兜底
 bcrypt==4.1.2        # 用户密码哈希
 itsdangerous>=2.1.2  # Session 签名（Starlette SessionMiddleware 依赖）
+jinja2>=3.1.4          # 模板渲染（FileSystemLoader）
