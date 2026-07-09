@@ -1,0 +1,35 @@
+
+NAME      IMAGE                    COMMAND                  SERVICE   CREATED          STATUS                          PORTS
+b2b-app   customer-analyzer-app    "/bin/sh -c 'mkdir -…"   app       30 minutes ago   Restarting (1) 15 seconds ago
+searxng   searxng/searxng:latest   "/usr/local/searxng/…"   searxng   30 minutes ago   Up 30 minutes (healthy)         127.0.0.1:8888->8080/tcp
+
+b2b-app  |   File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
+b2b-app  |     return self._loop.run_until_complete(task)
+b2b-app  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+b2b-app  |   File "/usr/local/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+b2b-app  |     return future.result()
+b2b-app  |            ^^^^^^^^^^^^^^^
+b2b-app  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 70, in serve
+b2b-app  |     await self._serve(sockets)
+b2b-app  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 77, in _serve
+b2b-app  |     config.load()
+b2b-app  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 435, in load
+b2b-app  |     self.loaded_app = import_from_string(self.app)
+b2b-app  |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+b2b-app  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
+b2b-app  |     raise exc from None
+b2b-app  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+b2b-app  |     module = importlib.import_module(module_str)
+b2b-app  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+b2b-app  |   File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
+b2b-app  |     return _bootstrap._gcd_import(name[level:], package, level)
+b2b-app  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+b2b-app  |   File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+b2b-app  |   File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+b2b-app  |   File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+b2b-app  |   File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+b2b-app  |   File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+b2b-app  |   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+b2b-app  |   File "/app/main.py", line 23, in <module>
+b2b-app  |     from jinja2 import Environment, FileSystemLoader
+b2b-app  | ModuleNotFoundError: No module named 'jinja2'
