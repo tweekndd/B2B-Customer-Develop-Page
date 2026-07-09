@@ -1,4 +1,3 @@
-# AI Trade Customer Analyzer V4.4
 
 <div align="center">
 
