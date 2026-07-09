@@ -27,11 +27,11 @@ services:
     restart: unless-stopped
     # 健康检查
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
 
   # ─── PostgreSQL 数据库（可选） ──────────────────────────────────────
   # 如不使用 PostgreSQL，请注释本服务，并确保 .env 中未设置 DATABASE_URL
