@@ -3,6 +3,15 @@ AI Trade Customer Analyzer V3.5.0 - 主程序入口
 V3.5.0: 更换AI引擎为智谱GLM-4.7-Flash（免费）
 客户发现 + 客户分析 + 客户数据库平台
 """
+# Copyright 2026 Alex
+#
+# Licensed under the Apache License, Version 2.0
+# You may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+
 import os
 from contextlib import asynccontextmanager
 import uvicorn

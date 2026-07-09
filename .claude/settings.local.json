@@ -99,7 +99,6 @@
       "Bash(git reset *)",
       "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from app.templates import *; print\\('Imports OK'\\)\")",
       "Bash(xargs wc -l)",
-<<<<<<< Updated upstream
       "Bash(git checkout *)",
       "Bash(gh repo *)",
       "Bash(git clone *)",
@@ -123,8 +122,6 @@
       "Bash(git commit -m 'V3.5.0 hotfix5: GLM模型自动降级 glm-4.7-flash→glm-4-flash-250414 *)",
       "Bash(git commit -m 'V3.5.0 hotfix6: 增强API响应调试日志，支持空内容重试 *)",
       "Bash(git commit *)",
-      "Bash(ssh *)"
-=======
       "Bash(git config *)",
       "Bash(git commit -m 'V3.2.3 前端 JS 模块化重构 *)",
       "Bash(pip list *)",
@@ -137,21 +134,33 @@
       "Bash(pip show *)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:pypi.org)",
-      "Bash(git restore *)",
       "Bash(git commit -m 'V3.2.6 Firecrawl 智能降级 — 三层兜底 + 性价比最优 *)",
       "Bash(git commit -m '更新 README 至 V3.2.6 *)",
       "Bash(git commit -m 'V3.2.6 数据同步网页端 — 一键导入/导出/备份/恢复 *)",
       "Bash(git commit -m 'V3.2.6 Firecrawl 降级耗尽控制 — 全部改用 1 credit scrape_url *)",
-      "Bash(git commit -m 'V3.2.6 移除 crawl_website 方法 — 全局统一使用 scrape_url \\(1 credit\\) *)",
-      "Bash(ssh *)",
+      "Bash(git commit -m 'V3.2.6 移除 crawl_website 方法 — 全局统一使用 scrape_url (1 credit) *)",
       "Bash(taskkill /f /im uvicorn.exe)",
       "Bash(taskkill /f /im python.exe)",
       "Bash(rm -f /tmp/test_cookies.txt /tmp/test_cookies2.txt)",
-      "Bash(git commit *)",
       "Bash(openssl rand *)",
       "Bash(git log *)",
-      "Bash(git grep *)"
->>>>>>> Stashed changes
+      "Bash(git grep *)",
+      "Bash(ssh *)",
+      "WebFetch(domain:docs.searxng.org)",
+      "Bash(python -c \"from app.services.searxng_discovery import search_searxng; print\\('SearXNG 模块导入成功 ✅'\\); print\\(f'SEARXNG_URL={search_searxng.__module__}'\\)\")",
+      "Bash(python -m py_compile app/services/searxng_discovery.py)",
+      "Bash(python -m py_compile app/services/google_discovery.py)",
+      "Bash(python -m py_compile app/api/discovery.py)",
+      "Bash(git commit -m 'V4.3 SearXNG自托管搜索引擎集成 — 零成本替代Tavily/SerpAPI *)",
+      "Skill(run)",
+      "Bash(break)",
+      "Bash(ls venv/Scripts/python*)",
+      "Bash(which python *)",
+      "Bash(which uvicorn *)",
+      "Bash(ls -la venv/Scripts/uvic*)",
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(python -m uvicorn main:app --host 127.0.0.1 --port 8000 --log-level info)",
+      "Bash(xxd)"
     ]
   }
 }
