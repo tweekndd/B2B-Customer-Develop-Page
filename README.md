@@ -1,9 +1,17 @@
 # AI Trade Customer Analyzer V4.4
-## License
 
-This project is licensed under the Apache License 2.0.
+<div align="center">
 
-See the [LICENSE](LICENSE) file for details.
+# AI Customer Development System
+
+An AI-powered customer discovery system for global B2B sales.
+
+![License](https://img.shields.io/github/license/tweekndd/repository)
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green)
+![LLM](https://img.shields.io/badge/LLM-DeepSeek-orange)
+
+</div>
 
 **外贸客户AI分析系统** — 客户发现 + 客户分析 + 客户数据库 + 云共享数据 + 用户与权限管理 + 瀑布式邮箱查找 + SSE 实时流 + 地理分布地图 + Reader (Jina AI) 免费爬虫降级 + SearXNG 自托管搜索引擎 + GLM 模型自动降级
 
