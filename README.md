@@ -16,6 +16,8 @@ An AI-powered customer discovery system for global B2B sales.
 
 自动通过 SearXNG（自托管无限制）/ Tavily / SerpAPI 发现潜在客户 → AI 分析客户官网 → 规则引擎评分 → Hunter/Tomba/Prospeo 瀑布式查找关键联系人邮箱 → 生成开发切入点，一站式完成。爬虫降级使用 Jina AI Reader（`r.jina.ai`）**完全免费、无需 API Key**。搜索引擎可选 SearXNG 自托管零成本方案。多用户共享数据库，支持管理员对每个用户的搜索配额、搜索深度、AI分析权限、邮箱查找权限进行精细化管控。
 
+**项目展示页：https://tweekndd.github.io/B2B-Customer-Develop-Page/**
+
 ---
 
 ## 功能概览
